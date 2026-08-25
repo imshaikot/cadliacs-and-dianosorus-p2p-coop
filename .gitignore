@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+tools/verify/shots/
+
+# Legally-dumped ROM sets. NEVER commit these.
+roms/*
+!roms/README.md

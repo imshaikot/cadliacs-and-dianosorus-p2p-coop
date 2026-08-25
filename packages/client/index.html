@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cadillacs &amp; Dinosaurs — online co-op</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="masthead">
+        <h1>CADILLACS &amp; DINOSAURS</h1>
+        <p class="sub">3-player online co-op · host-authoritative · WebRTC</p>
+        <p class="broker" id="broker-line"></p>
+      </header>
+
+      <!--
+        Gotcha #6: an AudioContext will not start without a user gesture, and
+        from M2 the guest's <video> needs one to play with sound. Clicking one
+        of these two buttons is that gesture, which is why nothing at all
+        happens on page load.
+      -->
+      <section class="panel" id="view-landing">
+        <div class="landing-grid">
+          <div class="join">
+            <label for="btn-host">START A NEW ROOM</label>
+            <button class="big" id="btn-host" type="button">HOST A GAME</button>
+          </div>
+          <form class="join" id="join-form">
+            <label for="input-code">JOIN A GAME</label>
+            <input
+              id="input-code"
+              name="code"
+              placeholder="ROOM CODE"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              maxlength="20"
+            />
+            <button class="big" id="btn-join" type="submit">JOIN</button>
+          </form>
+        </div>
+        <p class="error" id="landing-error" role="alert"></p>
+      </section>
+
+      <section class="panel" id="view-room" hidden>
+        <div class="room-head">
+          <div class="code-block">
+            <span class="code-label" id="code-label">ROOM CODE</span>
+            <code class="code" id="room-code">--------</code>
+            <button id="btn-copy" type="button" class="small">copy</button>
+          </div>
+          <div class="status-block">
+            <span class="pill" id="status-pill">idle</span>
+            <button id="btn-leave" type="button" class="small">leave</button>
+          </div>
+        </div>
+
+        <ol class="roster" id="roster"></ol>
+
+        <!-- M1 mounts the emulator canvas here; M2 mounts the guest's <video>. -->
+        <div class="stage" id="stage">
+          <p class="stage-placeholder">emulator lands here in M1</p>
+        </div>
+
+        <form class="chat" id="chat-form">
+          <input id="chat-input" placeholder="type a message to test the control channel" autocomplete="off" />
+          <button type="submit" class="small">send</button>
+        </form>
+        <ol class="chat-log" id="chat-log"></ol>
+      </section>
+
+      <section class="panel diagnostics">
+        <details open>
+          <summary>data channels</summary>
+          <pre id="channel-table">no peers yet</pre>
+        </details>
+        <details open>
+          <summary>log</summary>
+          <ol class="log" id="log-list"></ol>
+        </details>
+      </section>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

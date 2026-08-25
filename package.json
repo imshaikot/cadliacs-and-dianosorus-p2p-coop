@@ -1,0 +1,24 @@
+{
+  "name": "cadillacs-online",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Browser-based 3-player online co-op for Cadillacs and Dinosaurs (CPS-1.5) over WebRTC",
+  "workspaces": [
+    "packages/shared",
+    "packages/client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @dino/client",
+    "build": "npm run build --workspace @dino/client",
+    "preview": "npm run preview --workspace @dino/client",
+    "typecheck": "tsc --noEmit",
+    "lint:layering": "node scripts/check-layering.mjs",
+    "check": "npm run typecheck && npm run lint:layering",
+    "verify:m0": "node tools/verify/verify-m0.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}
