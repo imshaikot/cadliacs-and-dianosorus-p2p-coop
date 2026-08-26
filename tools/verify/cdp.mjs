@@ -162,6 +162,7 @@ export class Tab {
       }
     });
     await conn.send('Runtime.enable', {}, sessionId);
+    await conn.send('DOM.enable', {}, sessionId);
     await conn.send('Log.enable', {}, sessionId);
     await conn.send('Page.enable', {}, sessionId);
     if (url && url !== 'about:blank') await tab.goto(url);
@@ -260,6 +261,18 @@ export class Tab {
     await this.conn.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base }, this.sessionId);
     await this.conn.send('Input.dispatchKeyEvent', { type: 'char', text: '\r', ...base }, this.sessionId);
     await this.conn.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, this.sessionId);
+  }
+
+  /** Drive a real <input type=file>, which is otherwise unreachable from JS. */
+  async setFileInput(selector, filePath) {
+    const { root } = await this.conn.send('DOM.getDocument', { depth: 1 }, this.sessionId);
+    const { nodeId } = await this.conn.send(
+      'DOM.querySelector',
+      { nodeId: root.nodeId, selector },
+      this.sessionId,
+    );
+    if (!nodeId) throw new Error(`${this.name}: no file input matches ${selector}`);
+    await this.conn.send('DOM.setFileInputFiles', { files: [filePath], nodeId }, this.sessionId);
   }
 
   async screenshot(path) {

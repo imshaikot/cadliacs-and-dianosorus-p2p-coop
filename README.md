@@ -88,6 +88,27 @@ When somebody joins or leaves, the game pauses for a moment while everyone is
 handed the same savestate — that is what keeps the three simulations identical.
 If a player vanishes, the rest drop them and carry on within a few seconds.
 
+## Deploying
+
+```sh
+npm run build     # -> packages/client/dist, ~6.7 MB (6.1 MB of that is the core)
+npm run preview   # serve the built bundle locally
+npm run verify:prod
+```
+
+It is a static bundle: no server, no database, no origin state. Four things the
+host has to get right, all verified against a real production build:
+
+| | |
+|---|---|
+| `.wasm` MIME type | must be `application/wasm`, or the streaming compiler refuses it |
+| compression | the core is 6.1 MB raw, 3.1 MB gzip, 2.6 MB brotli |
+| HTTPS | `RTCPeerConnection` needs a secure context anywhere but localhost |
+| COOP/COEP | **not** needed — the core is single-threaded |
+
+In production there is no dev server, so each player picks their own
+`dino.zip` through a file dialog. No ROM is ever in the bundle.
+
 ## Configuration
 
 Everything lives in `.env` at the repo root. See [`.env.example`](./.env.example)

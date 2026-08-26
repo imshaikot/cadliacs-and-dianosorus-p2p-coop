@@ -20,7 +20,8 @@
     "verify:m2": "node tools/verify/verify-m2.mjs",
     "verify:m3": "node tools/verify/verify-m3.mjs",
     "verify:m4": "node tools/verify/verify-m4.mjs",
-    "verify": "npm run verify:m0 && npm run verify:m1 && npm run verify:m2 && npm run verify:m3 && npm run verify:m4"
+    "verify": "npm run verify:m0 && npm run verify:m1 && npm run verify:m2 && npm run verify:m3 && npm run verify:m4",
+    "verify:prod": "node tools/verify/verify-prod.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
