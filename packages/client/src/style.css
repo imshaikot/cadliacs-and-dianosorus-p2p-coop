@@ -154,6 +154,12 @@ input:focus { outline: 2px solid var(--hot); outline-offset: 1px; }
 }
 .hud b { color: var(--ink); font-weight: 400; }
 .hud[data-warn='true'] b { color: var(--bad); }
+.netplay .phase { text-transform: uppercase; letter-spacing: 0.1em; }
+.netplay[data-phase='lockstep'] .phase { color: var(--good); }
+.netplay[data-phase='stalled'] .phase { color: var(--bad); }
+.netplay[data-phase='syncing'] .phase { color: var(--hot); }
+.netplay[data-phase='solo'] .phase { color: var(--dim); }
+.hud[data-warn='true'] b { color: var(--bad); }
 
 .chat { display: flex; gap: 0.5rem; margin-top: 1rem; }
 .chat input { flex: 1; letter-spacing: normal; }

@@ -12,6 +12,21 @@ export interface AppConfig {
   broker: BrokerConfig;
   /** Human-readable summary of where we are signalling, for the UI. */
   brokerDescription: string;
+  /**
+   * Gotcha #10, in its lockstep form. Input sampled while simulating frame F is
+   * scheduled for F + delay, which is exactly a jitter buffer: it is how long a
+   * peer's packet has to arrive before everyone stalls waiting for it. Null
+   * means derive it per-resync from the measured candidate-pair RTT.
+   */
+  inputDelayFrames: number | null;
+  /**
+   * How long a peer may go silent before the others drop it and carry on.
+   *
+   * The transport usually notices a dead peer faster than this via the
+   * RTCPeerConnection state; this is the backstop for the cases it cannot see,
+   * such as a machine that simply stops answering.
+   */
+  peerTimeoutMs: number;
 }
 
 function readString(value: unknown): string | undefined {
@@ -83,5 +98,10 @@ export function loadConfig(): AppConfig {
       ? 'PeerJS cloud broker (default)'
       : `${secure === false ? 'ws' : 'wss'}://${host}:${port ?? (secure === false ? 80 : 443)}${path ?? '/'}`;
 
-  return { broker, brokerDescription };
+  const delay = readNumber(env.VITE_INPUT_DELAY_FRAMES, 'VITE_INPUT_DELAY_FRAMES');
+  const inputDelayFrames = delay === undefined ? null : Math.max(1, Math.round(delay));
+
+  const peerTimeoutMs = readNumber(env.VITE_PEER_TIMEOUT_MS, 'VITE_PEER_TIMEOUT_MS') ?? 2500;
+
+  return { broker, brokerDescription, inputDelayFrames, peerTimeoutMs };
 }

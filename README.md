@@ -5,10 +5,12 @@ CPS-1.5 beat-'em-up's built-in 3-player mode over WebRTC. The game itself is not
 modified; all of the work is input synchronisation and A/V transport around the
 emulator.
 
-**V1 is host-authoritative streaming.** One peer runs the emulator, captures its
-canvas and audio, and sends them to the other two as WebRTC media tracks. Guests
-run no emulator at all: they render a `<video>`, capture local input, and ship it
-back over a data channel. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+**Every player runs their own emulator; we synchronise inputs, not pixels.**
+Deterministic lockstep: a frame is simulated only once every player's input for
+it has arrived, so all three machines compute an identical game. The picture is
+local, so there is no display latency — only input delay — and it costs about
+1.8 KB/s per peer instead of a video stream. See
+[ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Status
 
@@ -16,16 +18,17 @@ back over a data channel. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 |---|---|---|
 | **M0** | PeerJS handshake | **done, verified** — `npm run verify:m0` |
 | **M1** | Emulator boots locally | **done, verified** — `npm run verify:m1` |
-| M2 | A/V streaming to guest | not started |
-| M3 | Guest input drives player 2 | not started |
-| M4 | Third player, room UX, latency HUD | not started |
+| **M2′** | Every peer runs the game, in lockstep | **done, verified** — `npm run verify:m2` |
+| M3′ | Guest input drives player 2 on both screens | not started |
+| M4′ | Third player, desync detection, HUD | not started |
 | M5 | Docs and deploy notes | not started |
 
 ## Requirements
 
 - Node 20+ (developed on 26)
 - A Chromium or Firefox-based browser
-- Your own legally-dumped MAME `dino` ROM set
+- Your own legally-dumped MAME `dino` ROM set — **one per player**, since every
+  player runs their own emulator. This project will never send a ROM to anyone.
 
 No Emscripten toolchain is needed. The emulator core is built ahead of time and
 vendored; see [`tools/core/README.md`](./tools/core/README.md) to rebuild it.
@@ -77,8 +80,13 @@ In development, Vite already serves the repo root, so the app reads your
 `roms/dino.zip` directly with no copying and no plugin. A production build has
 no such path and no ROM in the bundle, so it asks you to pick the file.
 
-Up to three players. The host is always player 1 because it owns the emulator;
-guests get 2 and 3 in join order.
+Up to three players. The host is player 1; guests get 2 and 3 in join order.
+Each player's own browser simulates the whole game, so everyone needs their own
+copy of the ROM.
+
+When somebody joins or leaves, the game pauses for a moment while everyone is
+handed the same savestate — that is what keeps the three simulations identical.
+If a player vanishes, the rest drop them and carry on within a few seconds.
 
 ## Configuration
 

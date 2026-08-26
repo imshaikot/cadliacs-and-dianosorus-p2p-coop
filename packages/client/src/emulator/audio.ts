@@ -26,6 +26,13 @@ export class EmulatorAudio {
   #tap: MediaStreamAudioDestinationNode | null = null;
   #scratch = new Float32Array(0);
   #stats: AudioStats = { fill: 0, primed: false, underruns: 0, dropped: 0, repeated: 0 };
+  /**
+   * Fires ~47 times a second from the audio thread, which keeps running when
+   * the tab is backgrounded and requestAnimationFrame does not. The emulator
+   * clock leans on this so a host who switches tabs does not freeze the game
+   * for everyone else.
+   */
+  onTick: (() => void) | null = null;
 
   get context(): AudioContext | null {
     return this.#ctx;
@@ -59,7 +66,11 @@ export class EmulatorAudio {
       numberOfOutputs: 1,
       outputChannelCount: [2],
     });
-    node.port.onmessage = (e: MessageEvent<AudioStats>) => {
+    node.port.onmessage = (e: MessageEvent<AudioStats | number>) => {
+      if (typeof e.data === 'number') {
+        this.onTick?.();
+        return;
+      }
       this.#stats = e.data;
     };
     const tap = ctx.createMediaStreamDestination();

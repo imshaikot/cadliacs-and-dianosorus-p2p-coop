@@ -9,7 +9,7 @@
  *   #3 the unavailable-id -> regenerate path
  */
 import { mkdirSync } from 'node:fs';
-import { launchChrome, connectBrowser, Tab, sleep } from './cdp.mjs';
+import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
 const OUT = new URL('./shots/', import.meta.url).pathname;
@@ -23,6 +23,7 @@ function check(name, ok, detail = '') {
 
 const { port, kill } = await launchChrome({ headless: true });
 const conn = await connectBrowser(port);
+console.log(`warming the dev server… ${await warmUp(conn, APP)}ms`);
 let failure = null;
 
 try {
@@ -118,14 +119,20 @@ try {
   );
 
   // --- gotcha #2: raw Uint8Array round trip, and its overhead ---------------
+  // 0x7f is neither WireKind.Input (0x01) nor WireKind.StateChunk (0x02), so
+  // the live netplay traffic now sharing this channel ignores it — and the
+  // probe ignores netplay's packets in turn.
+  const PROBE = [0x7f, 2, 3, 250, 255];
   await guest.eval(`window.__dinoInputProbe = [];
-    window.__dino.session().transport.onInput((from, bytes) => window.__dinoInputProbe.push([...bytes]));
+    window.__dino.session().transport.onInput((from, bytes) => {
+      if (bytes[0] === 0x7f) window.__dinoInputProbe.push([...bytes]);
+    });
     true`);
-  await host.eval(`window.__dino.session().transport.sendInput(new Uint8Array([1,2,3,250,255])); true`);
-  const roundTripped = await guest.waitFor('window.__dinoInputProbe.length > 0 && window.__dinoInputProbe[0]', 10000, 'input packet');
+  await host.eval(`window.__dino.session().transport.sendInput(new Uint8Array(${JSON.stringify(PROBE)})); true`);
+  const roundTripped = await guest.waitFor('window.__dinoInputProbe.length > 0 && window.__dinoInputProbe[0]', 10000, 'probe packet');
   check(
     "GOTCHA #2: serialization 'raw' round-trips a Uint8Array byte-for-byte",
-    JSON.stringify(roundTripped) === JSON.stringify([1, 2, 3, 250, 255]),
+    JSON.stringify(roundTripped) === JSON.stringify(PROBE),
     JSON.stringify(roundTripped),
   );
   const wireBytes = await host.eval(`(async () => {

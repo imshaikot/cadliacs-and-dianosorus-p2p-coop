@@ -7,6 +7,7 @@ import { Machine } from './emulator/machine.js';
 import { loadRomFromDevServer, loadRomFromFile } from './emulator/rom.js';
 import type { RomSource } from './emulator/rom.js';
 import { Log } from './log.js';
+import { Netplay } from './net/netplay.js';
 import { Session } from './session.js';
 import { UI } from './ui.js';
 
@@ -16,6 +17,7 @@ const log = new Log();
 let session: Session | null = null;
 let channelTimer: number | null = null;
 let machine: Machine | null = null;
+let netplay: Netplay | null = null;
 let hudTimer: number | null = null;
 let unbindKeyboard: (() => void) | null = null;
 
@@ -89,15 +91,16 @@ async function begin(role: 'host' | 'guest', roomCode: string): Promise<void> {
   ui.showRoom(role, next.roomCode);
   ui.setBusy(false);
 
-  // Only the host runs an emulator. Guests get its output as video in M2.
-  if (role === 'host') void bootEmulator();
+  // Every peer runs its own emulator; we synchronise inputs, not pixels.
+  void bootEmulator();
   // Gotcha #1 evidence, printed as soon as the channels actually exist rather
   // than assumed from the PeerJS docs.
   startChannelWatch();
 }
 
 /**
- * Boot sequence for the host: WASM core first, then the ROM, then the clock.
+ * Boot sequence, identical for every peer: WASM core first, then the ROM, then
+ * the clock. Guests are not spectators — they simulate the same game.
  *
  * Audio needs a user gesture (gotcha #6). The HOST A GAME click is that
  * gesture, and it counts for the rest of the page's life — the browser's
@@ -149,13 +152,11 @@ function startEmulation(rom: RomSource): void {
   log.info('ROM loaded', { name: rom.name, bytes: rom.bytes.length, from: rom.origin });
 
   void m.start().then(
-    () => {
+    async () => {
       ui.showScreen();
-      // Port 0 is the host's own player 1. Ports 1 and 2 stay empty until M3
-      // fills them from the network.
-      unbindKeyboard = bindKeyboard(m.latches[0]!);
       log.info('emulator running', { fps: m.core.fps, sampleRate: m.core.sampleRate });
       startHud();
+      await joinNetplay(m);
     },
     (err: unknown) => {
       log.error('the emulator would not start', {
@@ -164,6 +165,42 @@ function startEmulation(rom: RomSource): void {
       ui.showStageMessage('Could not start the emulator. See the log.');
     },
   );
+}
+
+/**
+ * Bring this peer into the synchronised game.
+ *
+ * The keyboard is bound to OUR port, whichever that turns out to be — the host
+ * drives port 0, guests get 1 and 2 — so the same code path serves every peer.
+ */
+async function joinNetplay(m: Machine): Promise<void> {
+  const s = session;
+  if (!s || netplay) return;
+  let slot: number;
+  try {
+    slot = await s.waitForSlot();
+  } catch (err) {
+    log.error('never got a player slot, staying solo', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    unbindKeyboard = bindKeyboard(m.latches[0]!);
+    return;
+  }
+  const port = slot - 1;
+  unbindKeyboard = bindKeyboard(m.latches[port]!);
+  log.info(`keyboard drives player ${slot}`, { port });
+
+  const net = new Netplay({
+    session: s,
+    machine: m,
+    log,
+    delayFramesOverride: config.inputDelayFrames,
+    peerTimeoutMs: config.peerTimeoutMs,
+  });
+  netplay = net;
+  net.onStatus((status) => ui.setNetStatus(status.phase, status.detail));
+  net.attach();
+  net.announceReady();
 }
 
 /** FBNeo is chatty on boot. Keep the page log readable; console keeps it all. */
@@ -180,7 +217,7 @@ function startHud(): void {
   if (hudTimer !== null) return;
   hudTimer = window.setInterval(() => {
     if (!machine) return;
-    ui.renderHud(machine.stats, machine.core.fps);
+    ui.renderHud(machine.stats, machine.core.fps, netplay?.lockstep.stats(machine.frame) ?? null);
   }, 250);
 }
 
@@ -233,6 +270,8 @@ async function teardown(reason: string): Promise<void> {
   }
   unbindKeyboard?.();
   unbindKeyboard = null;
+  netplay?.detach();
+  netplay = null;
   const m = machine;
   machine = null;
   if (m) await m.dispose();
@@ -267,6 +306,7 @@ declare global {
       logs: Log['entries'];
       session: () => Session | null;
       machine: () => Machine | null;
+      netplay: () => Netplay | null;
       channels: () => ChannelDiagnostics[];
       stats: () => Promise<Record<PeerId, PeerStats | null>>;
       snapshot: () => unknown;
@@ -282,6 +322,7 @@ window.__dino = {
   logs: log.entries,
   session: () => session,
   machine: () => machine,
+  netplay: () => netplay,
   channels: () => session?.describeChannels() ?? [],
   stats: async () => (await session?.peerStats()) ?? {},
   snapshot: () => ({
@@ -295,6 +336,9 @@ window.__dino = {
     channels: session?.describeChannels() ?? [],
     emulator: machine
       ? { running: machine.running, targetFps: machine.core.fps, sampleRate: machine.core.sampleRate, ...machine.stats }
+      : null,
+    netplay: netplay && machine
+      ? { ...netplay.status, resyncs: netplay.resyncs, selfPort: netplay.selfPort, ...netplay.lockstep.stats(machine.frame) }
       : null,
     logCount: log.entries.length,
   }),

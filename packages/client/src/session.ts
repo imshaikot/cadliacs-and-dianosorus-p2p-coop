@@ -101,6 +101,32 @@ export class Session {
     return [...this.#players.values()].sort((a, b) => a.slot - b.slot);
   }
 
+  /**
+   * Resolves once we know which player we are. A host knows immediately; a
+   * guest only learns it when `welcome` comes back, which is after connect().
+   */
+  waitForSlot(timeoutMs = 15000): Promise<PlayerSlot> {
+    if (this.#selfSlot !== null) return Promise.resolve(this.#selfSlot);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        un();
+        reject(new Error('the host never assigned us a player slot'));
+      }, timeoutMs);
+      const un = this.roster.on(() => {
+        if (this.#selfSlot === null) return;
+        clearTimeout(timer);
+        un();
+        resolve(this.#selfSlot);
+      });
+    });
+  }
+
+  /** Emulator port a peer drives, or null if we never seated them. */
+  portForPeer(peerId: PeerId): number | null {
+    const slot = this.#players.get(peerId)?.slot;
+    return slot === undefined ? null : slot - 1;
+  }
+
   async start(): Promise<void> {
     this.#wire();
     const result = await this.#transport.connect();

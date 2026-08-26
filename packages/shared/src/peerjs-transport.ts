@@ -368,6 +368,7 @@ export class PeerJsTransport implements Transport {
         record.announced = true;
         this.#peerJoin.emit(record.info);
       }
+      this.#watchConnectionState(conn);
       // A guest that joins after the host already has a stream still gets it.
       if (this.role === 'host' && this.#outboundStream) this.#callPeer(record.info.id);
     });
@@ -424,6 +425,38 @@ export class PeerJsTransport implements Transport {
         peerId: conn.peer,
       }),
     );
+  }
+
+  /**
+   * A browser tab that is killed outright does not always get to close its data
+   * channels politely, and PeerJS only surfaces `close` when the channel itself
+   * closes. Watching the RTCPeerConnection turns a ~30s ICE timeout into a
+   * prompt, definite answer — which matters a great deal to a lockstep game,
+   * where a peer nobody has declared dead is a peer everybody waits for.
+   */
+  #watchConnectionState(conn: DataConnection): void {
+    const pc = conn.peerConnection;
+    if (!pc) return;
+    const onChange = (): void => {
+      const state = pc.connectionState;
+      if (state === 'failed' || state === 'closed') {
+        this.#dropRecord(conn.peer, `webrtc connection ${state}`, true);
+      } else if (state === 'disconnected') {
+        // Often transient; report it but do not act on it.
+        this.#error.emit({
+          code: 'peer-disconnected',
+          message: 'webrtc connection disconnected, may recover',
+          fatal: false,
+          peerId: conn.peer,
+        });
+      }
+    };
+    pc.addEventListener('connectionstatechange', onChange);
+    pc.addEventListener('iceconnectionstatechange', () => {
+      if (pc.iceConnectionState === 'failed') {
+        this.#dropRecord(conn.peer, 'ice connection failed', true);
+      }
+    });
   }
 
   #recordFor(peerId: PeerId): PeerRecord {

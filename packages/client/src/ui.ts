@@ -2,6 +2,7 @@ import { formatRoomCode } from '@dino/shared';
 import type { ChannelDiagnostics, TransportStatus } from '@dino/shared';
 
 import type { MachineStats } from './emulator/machine.js';
+import type { LockstepStats } from './net/lockstep.js';
 import type { LogEntry } from './log.js';
 import type { Player } from './session.js';
 
@@ -44,6 +45,7 @@ export class UI {
   readonly #romPicker = must<HTMLElement>('rom-picker');
   readonly #romFile = must<HTMLInputElement>('rom-file');
   readonly #hud = must<HTMLElement>('emu-hud');
+  readonly #netHud = must<HTMLElement>('net-hud');
   #shareText = '';
 
   constructor(cb: UICallbacks) {
@@ -178,7 +180,13 @@ export class UI {
     this.#romPicker.hidden = true;
   }
 
-  renderHud(stats: MachineStats, targetFps: number): void {
+  setNetStatus(phase: string, detail: string): void {
+    this.#netHud.hidden = false;
+    this.#netHud.dataset['phase'] = phase;
+    this.#netHud.title = detail;
+  }
+
+  renderHud(stats: MachineStats, targetFps: number, net: LockstepStats | null): void {
     this.#hud.hidden = false;
     // Anything below ~58fps on a 59.63Hz target is visible as slowdown.
     const behind = stats.emulatedFps > 0 && stats.emulatedFps < targetFps - 1.5;
@@ -190,6 +198,30 @@ export class UI {
       field('audio buffer', `${stats.audio.fill} smp`),
       field('underruns', String(stats.audio.underruns)),
       field('drift fixes', `${stats.audio.dropped}/${stats.audio.repeated}`),
+    );
+    this.#renderNetHud(stats, net);
+  }
+
+  #renderNetHud(stats: MachineStats, net: LockstepStats | null): void {
+    if (!net || !net.running) {
+      if (this.#netHud.dataset['phase'] === undefined) this.#netHud.hidden = true;
+      return;
+    }
+    this.#netHud.hidden = false;
+    this.#netHud.dataset['warn'] = String(stats.stalled);
+    const phase = document.createElement('b');
+    phase.className = 'phase';
+    phase.textContent = stats.stalled ? `stalled on P${net.waitingFor.map((p) => p + 1).join(',P')}` : 'lockstep';
+    const lead = Object.entries(net.leadByPort)
+      .map(([port, frames]) => `P${Number(port) + 1}:${frames >= 0 ? '+' : ''}${frames}`)
+      .join(' ');
+    this.#netHud.replaceChildren(
+      phase,
+      field('frame', String(net.frame)),
+      field('input delay', `${net.delayFrames}f / ${(net.delayFrames * 16.78).toFixed(0)}ms`),
+      field('lead', lead || '—'),
+      field('stalls', `${net.stalls} (${net.stalledFrames}f)`),
+      field('pkts', `${net.packetsOut}\u2191 ${net.packetsIn}\u2193`),
     );
   }
 

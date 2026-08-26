@@ -145,6 +145,7 @@ export class Tab {
     const { targetId } = await conn.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await conn.send('Target.attachToTarget', { targetId, flatten: true });
     const tab = new Tab(conn, sessionId, name);
+    tab.targetId = targetId;
     conn.onEvent((msg) => {
       if (msg.sessionId !== sessionId) return;
       if (msg.method === 'Runtime.consoleAPICalled') {
@@ -194,7 +195,12 @@ export class Tab {
         value = undefined;
       }
       if (value) return value;
-      if (Date.now() > deadline) throw new Error(`${this.name}: timed out waiting for ${label}`);
+      if (Date.now() > deadline) {
+        // Dying blind here costs more time than the check saves.
+        const tail = this.console.slice(-6).map((c) => `      ${c.type}: ${c.text.slice(0, 160)}`).join('\n');
+        const errs = this.errors.length ? `\n    errors:\n      ${this.errors.join('\n      ')}` : '';
+        throw new Error(`${this.name}: timed out waiting for ${label}\n    last console:\n${tail}${errs}`);
+      }
       await new Promise((r) => setTimeout(r, 120));
     }
   }
@@ -294,6 +300,25 @@ function previewToString(preview) {
   }
   const props = (preview.properties ?? []).map((p) => `${p.name}: ${p.value}`).join(', ');
   return `{${props}${preview.overflow ? ', …' : ''}}`;
+}
+
+/**
+ * Loads the app once and throws the tab away.
+ *
+ * Vite transforms modules on first request, so a cold dev server makes the
+ * first real navigation arbitrarily slow — slow enough to blow a timeout and
+ * look exactly like an application hang. Paying that cost somewhere clearly
+ * labelled beats debugging a phantom.
+ */
+export async function warmUp(conn, url) {
+  const tab = await Tab.create(conn, url, 'WARMUP');
+  const t0 = Date.now();
+  try {
+    await tab.waitFor('typeof window.__dino === "object"', 180000, 'app module graph');
+  } finally {
+    await conn.send('Target.closeTarget', { targetId: tab.targetId }).catch(() => {});
+  }
+  return Date.now() - t0;
 }
 
 export async function connectBrowser(port) {

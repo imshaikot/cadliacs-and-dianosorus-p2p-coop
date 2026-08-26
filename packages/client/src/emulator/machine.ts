@@ -10,6 +10,12 @@ export const PORT_COUNT = 3;
 export interface MachineStats {
   /** Emulated frames since boot. */
   frames: number;
+  /** Authoritative frame number. Shared across peers when in lockstep. */
+  frame: number;
+  /** True when the driver is withholding permission to advance. */
+  stalled: boolean;
+  /** rAF pumps that ended with no frame run because of a stall. */
+  stalledPumps: number;
   /** Measured emulation rate over the last second. Should sit at ~59.6. */
   emulatedFps: number;
   /** Rolling mean cost of one core.runFrame(), milliseconds. */
@@ -19,6 +25,17 @@ export interface MachineStats {
   /** Canvas presents. Lower than `frames` only if we ever skip rendering. */
   presented: number;
   audio: AudioStats;
+}
+
+/**
+ * Decides what input a frame runs with, and — by returning null — whether it
+ * runs at all. Solo play has no driver and free-runs off the wall clock;
+ * lockstep installs one and the emulator then advances only at the rate
+ * consensus allows.
+ */
+export interface FrameDriver {
+  inputsFor(frame: number): Uint16Array | null;
+  noteStalledFrame?: () => void;
 }
 
 export interface MachineOptions {
@@ -47,6 +64,15 @@ export class Machine {
   readonly latches: InputLatch[] = Array.from({ length: PORT_COUNT }, () => new InputLatch());
 
   #onLog: ((line: string) => void) | undefined;
+  /**
+   * Called after each simulated frame, with the frame number just completed.
+   *
+   * This is the hook desync detection hangs off: in lockstep every peer must
+   * compute an identical frame N, so a periodic checksum taken here and
+   * compared across peers is what turns a silent divergence into a reported
+   * one. Verification uses it for exactly that.
+   */
+  onFrame: ((frame: number) => void) | null = null;
   #raf = 0;
   #running = false;
   #last = 0;
@@ -54,6 +80,10 @@ export class Machine {
   #frameMs = 1000 / 59.63;
 
   #frames = 0;
+  #frame = 0;
+  #driver: FrameDriver | null = null;
+  #stalled = false;
+  #stalledPumps = 0;
   #droppedCatchUp = 0;
   #frameTimeMs = 0;
   #fpsWindowStart = 0;
@@ -97,9 +127,24 @@ export class Machine {
     return this.#running;
   }
 
+  get frame(): number {
+    return this.#frame;
+  }
+
+  /** Install lockstep, or pass null to go back to free-running solo play. */
+  setDriver(driver: FrameDriver | null, startFrame = this.#frame): void {
+    this.#driver = driver;
+    this.#frame = startFrame;
+    this.#stalled = false;
+    this.#accumulator = 0;
+  }
+
   get stats(): MachineStats {
     return {
       frames: this.#frames,
+      frame: this.#frame,
+      stalled: this.#stalled,
+      stalledPumps: this.#stalledPumps,
       emulatedFps: this.#emulatedFps,
       frameTimeMs: this.#frameTimeMs,
       droppedCatchUp: this.#droppedCatchUp,
@@ -113,6 +158,11 @@ export class Machine {
     if (this.#running) return;
     if (!this.core.loaded) throw new Error('no ROM loaded');
     await this.audio.start();
+    // The audio thread is the clock of record; rAF is a second, nicer-aligned
+    // pump for when the tab is actually on screen. Both call the same
+    // accumulator, which is inherently safe against being driven twice: each
+    // call only ever spends the wall time that has genuinely elapsed.
+    this.audio.onTick = () => this.#advance(performance.now());
     this.#running = true;
     this.#emulatedFps = 0;
     this.#last = performance.now();
@@ -124,6 +174,7 @@ export class Machine {
 
   stop(): void {
     this.#running = false;
+    this.audio.onTick = null;
     if (this.#raf) cancelAnimationFrame(this.#raf);
     this.#raf = 0;
     for (const latch of this.latches) latch.clear();
@@ -137,6 +188,11 @@ export class Machine {
   #pump = (now: number): void => {
     if (!this.#running) return;
     this.#raf = requestAnimationFrame(this.#pump);
+    this.#advance(now);
+  };
+
+  #advance(now: number): void {
+    if (!this.#running) return;
 
     let delta = now - this.#last;
     this.#last = now;
@@ -146,15 +202,28 @@ export class Machine {
     this.#accumulator += delta;
 
     let ran = 0;
+    let blocked = false;
     while (this.#accumulator >= this.#frameMs && ran < Machine.MAX_CATCH_UP) {
-      this.#step();
+      if (!this.#step()) {
+        blocked = true;
+        break;
+      }
       this.#accumulator -= this.#frameMs;
       ran += 1;
     }
-    if (ran === Machine.MAX_CATCH_UP && this.#accumulator >= this.#frameMs) {
+    if (blocked) {
+      // Wall time keeps passing while we wait on a peer, but that time is not a
+      // debt to repay — in lockstep the clock IS consensus, not the wall. Let
+      // the accumulator bank one frame so we resume instantly, and no more, so
+      // we resume at 1x rather than sprinting through the backlog.
+      this.#accumulator = Math.min(this.#accumulator, this.#frameMs);
+      this.#stalledPumps += 1;
+      this.#driver?.noteStalledFrame?.();
+    } else if (ran === Machine.MAX_CATCH_UP && this.#accumulator >= this.#frameMs) {
       this.#droppedCatchUp += Math.floor(this.#accumulator / this.#frameMs);
       this.#accumulator = 0;
     }
+    this.#stalled = blocked;
 
     // Only the newest frame is worth showing; intermediate catch-up frames are
     // emulated but never presented.
@@ -171,12 +240,18 @@ export class Machine {
       this.#statsTick = now;
       this.audio.requestStats();
     }
-  };
+  }
 
-  /** Exactly one emulated frame: latch, run, drain audio. */
-  #step(): void {
+  /**
+   * Exactly one emulated frame: latch, run, drain audio.
+   * Returns false if the driver withheld permission, in which case nothing
+   * happened and the emulator has not advanced.
+   */
+  #step(): boolean {
+    const masks = this.#driver ? this.#driver.inputsFor(this.#frame) : this.#soloMasks();
+    if (!masks) return false;
     for (let port = 0; port < PORT_COUNT; port += 1) {
-      this.core.setInput(port, (this.latches[port] as InputLatch).latch());
+      this.core.setInput(port, masks[port] ?? 0);
     }
     const t0 = performance.now();
     this.core.runFrame();
@@ -186,5 +261,18 @@ export class Machine {
     this.#frameTimeMs = this.#frameTimeMs === 0 ? cost : this.#frameTimeMs * 0.95 + cost * 0.05;
     this.audio.push(this.core.audio());
     this.#frames += 1;
+    this.#frame += 1;
+    this.onFrame?.(this.#frame - 1);
+    return true;
   }
+
+  /** Solo play: this peer's keyboard drives port 0, the rest sit neutral. */
+  #soloMasks(): Uint16Array {
+    for (let port = 0; port < PORT_COUNT; port += 1) {
+      this.#soloScratch[port] = (this.latches[port] as InputLatch).latch();
+    }
+    return this.#soloScratch;
+  }
+
+  #soloScratch = new Uint16Array(PORT_COUNT);
 }

@@ -30,6 +30,20 @@ export type ControlMessage =
   | { t: 'reject'; reason: string }
   /** either direction, on deliberate teardown. */
   | { t: 'bye'; reason: string }
+  /** guest -> host: my core is up and I have a ROM, deal me in. */
+  | { t: 'ready'; port: number }
+  /**
+   * host -> everyone: the membership of the game is changing.
+   *
+   * A savestate is on its way over the input channel under `transferId`; when
+   * you have it, restore and run lockstep from `frame` with exactly `ports`
+   * live. Every membership change — join AND leave — goes through this, so all
+   * peers switch port set at the same frame from the same state by
+   * construction, rather than each guessing when a departed peer stopped.
+   */
+  | { t: 'begin'; frame: number; transferId: number; ports: number[]; delayFrames: number; reason: string }
+  /** guest -> host: restored and ready to run `frame`. */
+  | { t: 'begun'; frame: number; port: number }
   /**
    * Either direction. M0 smoke test: proves the control channel carries
    * arbitrary strings end to end. Kept afterwards as a debug echo.
@@ -58,6 +72,9 @@ export function decodeControl(raw: unknown): ControlMessage | null {
     case 'welcome':
     case 'reject':
     case 'bye':
+    case 'ready':
+    case 'begin':
+    case 'begun':
     case 'chat':
       return parsed as ControlMessage;
     default:

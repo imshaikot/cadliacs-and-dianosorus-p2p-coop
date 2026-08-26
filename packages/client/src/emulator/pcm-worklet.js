@@ -37,6 +37,18 @@ const TOLERANCE = 400; // ~8ms deadband around the target
  */
 const CORRECTION_INTERVAL = 16;
 /**
+ * Quanta between metronome ticks posted back to the main thread (~21ms).
+ *
+ * requestAnimationFrame stops in a backgrounded tab. For a solo emulator that
+ * is merely rude; under lockstep it is fatal, because a host who switches tabs
+ * stops publishing input and every other peer waits for it forever. The audio
+ * thread is not throttled — it cannot be, or background audio would stutter —
+ * so it is the one clock in the browser we can trust to keep ticking.
+ */
+const TICK_INTERVAL_QUANTA = 8;
+/** Sent as a bare number so the main thread can tell it from a stats object. */
+const TICK = 0;
+/**
  * Steering has to act on a SMOOTHED fill level, not the instantaneous one.
  *
  * The producer pushes one 805-frame chunk per emulated frame while the consumer
@@ -73,6 +85,7 @@ class PcmSink extends AudioWorkletProcessor {
      */
     this.primed = false;
     this.sinceCorrection = CORRECTION_INTERVAL;
+    this.sinceTick = 0;
     this.running = true;
 
     this.port.onmessage = (e) => {
@@ -121,6 +134,11 @@ class PcmSink extends AudioWorkletProcessor {
   }
 
   process(_inputs, outputs) {
+    this.sinceTick += 1;
+    if (this.sinceTick >= TICK_INTERVAL_QUANTA) {
+      this.sinceTick = 0;
+      this.port.postMessage(TICK);
+    }
     const out = outputs[0];
     if (!out || out.length === 0) return this.running;
     const l = out[0];

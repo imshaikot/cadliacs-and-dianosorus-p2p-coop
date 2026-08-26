@@ -10,7 +10,7 @@
  *     (latch -> emulation). Deterministic, so it cannot pass by coincidence.
  */
 import { mkdirSync } from 'node:fs';
-import { launchChrome, connectBrowser, Tab, sleep } from './cdp.mjs';
+import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
 import { KEYS, bit } from './keys.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
@@ -38,6 +38,7 @@ const SCREEN_PROBE = `(() => {
 
 const { port, kill } = await launchChrome({ headless: true });
 const conn = await connectBrowser(port);
+console.log(`warming the dev server… ${await warmUp(conn, APP)}ms`);
 let failure = null;
 
 try {
