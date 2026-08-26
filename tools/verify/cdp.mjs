@@ -4,16 +4,26 @@
  * real input events, reading real console output, and taking real screenshots.
  */
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-export async function launchChrome({ port = 9222, headless = true, profileDir } = {}) {
-  const dir = profileDir ?? `/tmp/cdp-profile-${port}`;
+/**
+ * Launches a throwaway Chrome and returns the DevTools endpoint it picked.
+ *
+ * The debugging port is deliberately ephemeral (`=0`, then read back from
+ * DevToolsActivePort). A fixed port looks simpler right up until a previous run
+ * is killed mid-flight: the orphan keeps answering on that port, the next run
+ * silently attaches to *it* instead of a fresh browser, and you spend an hour
+ * debugging the app instead of the harness.
+ */
+export async function launchChrome({ headless = true, profileDir } = {}) {
+  const dir = profileDir ?? `/tmp/cdp-profile-${process.pid}-${Date.now()}`;
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   const args = [
-    `--remote-debugging-port=${port}`,
+    '--remote-debugging-port=0',
     `--user-data-dir=${dir}`,
     '--no-first-run',
     '--no-default-browser-check',
@@ -26,23 +36,48 @@ export async function launchChrome({ port = 9222, headless = true, profileDir } 
     'about:blank',
   ];
   if (headless) args.unshift('--headless=new');
-  const proc = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  // Detached so we can take the whole process group down; Chrome's renderer
+  // children outlive a kill aimed only at the parent.
+  const proc = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   let stderr = '';
   proc.stderr.on('data', (d) => (stderr += d));
 
-  const deadline = Date.now() + 20000;
-  for (;;) {
+  const kill = () => {
     try {
-      const r = await fetch(`http://127.0.0.1:${port}/json/version`);
-      if (r.ok) return { proc, port, info: await r.json(), profileDir: dir };
+      process.kill(-proc.pid, 'SIGKILL');
     } catch {
-      /* not up yet */
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        /* already gone */
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
+  };
+  process.on('exit', kill);
+
+  const portFile = join(dir, 'DevToolsActivePort');
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    let port = null;
+    try {
+      port = Number(readFileSync(portFile, 'utf8').split('\n')[0]);
+    } catch {
+      /* not written yet */
+    }
+    if (port) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/json/version`);
+        if (r.ok) return { proc, port, kill, info: await r.json(), profileDir: dir };
+      } catch {
+        /* not listening yet */
+      }
     }
     if (Date.now() > deadline) {
-      proc.kill('SIGKILL');
-      throw new Error(`Chrome did not expose CDP on ${port}. stderr:\n${stderr}`);
+      kill();
+      throw new Error(`Chrome never exposed CDP. stderr:\n${stderr}`);
     }
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 100));
   }
 }
 
@@ -192,6 +227,28 @@ export class Tab {
     }
   }
 
+  /** Real trusted key events, so app keydown/keyup handlers see the real thing. */
+  async keyEvent(type, { code, key, vk }) {
+    await this.conn.send(
+      'Input.dispatchKeyEvent',
+      {
+        type,
+        code,
+        key,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+        ...(type === 'char' ? { text: key } : {}),
+      },
+      this.sessionId,
+    );
+  }
+
+  async holdKey(spec, ms) {
+    await this.keyEvent('rawKeyDown', spec);
+    await new Promise((r) => setTimeout(r, ms));
+    await this.keyEvent('keyUp', spec);
+  }
+
   async pressEnter() {
     const base = { windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, key: 'Enter', code: 'Enter' };
     await this.conn.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base }, this.sessionId);
@@ -205,6 +262,18 @@ export class Tab {
     writeFileSync(path, Buffer.from(data, 'base64'));
     await this.conn.send('Emulation.clearDeviceMetricsOverride', {}, this.sessionId);
     return path;
+  }
+
+  /** Poll the captured console for a line. Console arrives asynchronously, so
+   *  asserting on it with a bare `.some()` is a race. */
+  async waitForConsole(pattern, timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const hit = this.console.find((c) => pattern.test(c.text));
+      if (hit) return hit;
+      if (Date.now() > deadline) return null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
   }
 
   consoleText() {

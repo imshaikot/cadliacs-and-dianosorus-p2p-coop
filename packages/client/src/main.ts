@@ -2,6 +2,10 @@ import { generateRoomCode, normalizeRoomCode } from '@dino/shared';
 import type { ChannelDiagnostics, PeerStats, PeerId } from '@dino/shared';
 
 import { loadConfig } from './config.js';
+import { bindKeyboard } from './emulator/input.js';
+import { Machine } from './emulator/machine.js';
+import { loadRomFromDevServer, loadRomFromFile } from './emulator/rom.js';
+import type { RomSource } from './emulator/rom.js';
 import { Log } from './log.js';
 import { Session } from './session.js';
 import { UI } from './ui.js';
@@ -11,6 +15,9 @@ const log = new Log();
 
 let session: Session | null = null;
 let channelTimer: number | null = null;
+let machine: Machine | null = null;
+let hudTimer: number | null = null;
+let unbindKeyboard: (() => void) | null = null;
 
 const ui = new UI({
   onHost: () => void begin('host', generateRoomCode()),
@@ -22,8 +29,17 @@ const ui = new UI({
     }
     void begin('guest', code);
   },
-  onLeave: () => teardown('left the room'),
+  onLeave: () => void teardown('left the room'),
   onChat: (text) => session?.sendChat(text),
+  onRomPicked: (file) => {
+    void loadRomFromFile(file)
+      .then((rom) => startEmulation(rom))
+      .catch((err) => {
+        log.error('that file will not do', { message: err instanceof Error ? err.message : String(err) });
+        ui.showStageMessage('That is not a zip archive. Pick your dino.zip.');
+        ui.showRomPicker(true);
+      });
+  },
 });
 
 ui.setBroker(config.brokerDescription);
@@ -72,9 +88,100 @@ async function begin(role: 'host' | 'guest', roomCode: string): Promise<void> {
 
   ui.showRoom(role, next.roomCode);
   ui.setBusy(false);
+
+  // Only the host runs an emulator. Guests get its output as video in M2.
+  if (role === 'host') void bootEmulator();
   // Gotcha #1 evidence, printed as soon as the channels actually exist rather
   // than assumed from the PeerJS docs.
   startChannelWatch();
+}
+
+/**
+ * Boot sequence for the host: WASM core first, then the ROM, then the clock.
+ *
+ * Audio needs a user gesture (gotcha #6). The HOST A GAME click is that
+ * gesture, and it counts for the rest of the page's life — the browser's
+ * "sticky activation" does not expire the way transient activation does — so
+ * the awaits in here do not cost us the right to start an AudioContext.
+ */
+async function bootEmulator(): Promise<void> {
+  if (machine) return;
+  ui.showStageMessage('loading the emulator core…');
+  try {
+    machine = await Machine.boot({ canvas: ui.screen, onLog: onCoreLog });
+  } catch (err) {
+    log.error('the emulator core failed to load', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    ui.showStageMessage('The emulator core failed to load. See the log.');
+    return;
+  }
+  log.info('emulator core loaded');
+
+  ui.showStageMessage('looking for the ROM…');
+  const rom = await loadRomFromDevServer();
+  if (!rom) {
+    log.info('no ROM served by the dev server, asking for one');
+    ui.showStageMessage('');
+    ui.showRomPicker(true);
+    return;
+  }
+  startEmulation(rom);
+}
+
+function startEmulation(rom: RomSource): void {
+  const m = machine;
+  if (!m) return;
+  ui.showRomPicker(false);
+  ui.showStageMessage('starting…');
+  try {
+    m.loadRom(rom.name, rom.bytes);
+  } catch (err) {
+    log.error('the ROM would not load', {
+      name: rom.name,
+      bytes: rom.bytes.length,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    ui.showStageMessage('FBNeo rejected that ROM. See the log.');
+    ui.showRomPicker(true);
+    return;
+  }
+  log.info('ROM loaded', { name: rom.name, bytes: rom.bytes.length, from: rom.origin });
+
+  void m.start().then(
+    () => {
+      ui.showScreen();
+      // Port 0 is the host's own player 1. Ports 1 and 2 stay empty until M3
+      // fills them from the network.
+      unbindKeyboard = bindKeyboard(m.latches[0]!);
+      log.info('emulator running', { fps: m.core.fps, sampleRate: m.core.sampleRate });
+      startHud();
+    },
+    (err: unknown) => {
+      log.error('the emulator would not start', {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      ui.showStageMessage('Could not start the emulator. See the log.');
+    },
+  );
+}
+
+/** FBNeo is chatty on boot. Keep the page log readable; console keeps it all. */
+function onCoreLog(line: string): void {
+  const text = line.trimEnd();
+  if (!text) return;
+  console.debug('[fbneo]', text);
+  if (/Romset description|successfully started|missing|error|failed/i.test(text)) {
+    log.net(`fbneo: ${text}`);
+  }
+}
+
+function startHud(): void {
+  if (hudTimer !== null) return;
+  hudTimer = window.setInterval(() => {
+    if (!machine) return;
+    ui.renderHud(machine.stats, machine.core.fps);
+  }, 250);
 }
 
 function startChannelWatch(): void {
@@ -115,11 +222,22 @@ function negotiatedFacts(row: ChannelDiagnostics): Record<string, unknown> {
   };
 }
 
-function teardown(reason: string): void {
+async function teardown(reason: string): Promise<void> {
   if (channelTimer !== null) {
     clearInterval(channelTimer);
     channelTimer = null;
   }
+  if (hudTimer !== null) {
+    clearInterval(hudTimer);
+    hudTimer = null;
+  }
+  unbindKeyboard?.();
+  unbindKeyboard = null;
+  const m = machine;
+  machine = null;
+  if (m) await m.dispose();
+  ui.hideHud();
+  ui.showStageMessage('waiting');
   session?.close(reason);
   session = null;
   ui.renderChannels([]);
@@ -148,6 +266,7 @@ declare global {
       config: typeof config;
       logs: Log['entries'];
       session: () => Session | null;
+      machine: () => Machine | null;
       channels: () => ChannelDiagnostics[];
       stats: () => Promise<Record<PeerId, PeerStats | null>>;
       snapshot: () => unknown;
@@ -162,6 +281,7 @@ window.__dino = {
   config,
   logs: log.entries,
   session: () => session,
+  machine: () => machine,
   channels: () => session?.describeChannels() ?? [],
   stats: async () => (await session?.peerStats()) ?? {},
   snapshot: () => ({
@@ -173,6 +293,9 @@ window.__dino = {
     prettyRoomCode: session?.prettyRoomCode ?? null,
     players: session?.players ?? [],
     channels: session?.describeChannels() ?? [],
+    emulator: machine
+      ? { running: machine.running, targetFps: machine.core.fps, sampleRate: machine.core.sampleRate, ...machine.stats }
+      : null,
     logCount: log.entries.length,
   }),
 };

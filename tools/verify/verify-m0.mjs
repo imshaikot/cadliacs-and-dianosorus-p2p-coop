@@ -21,8 +21,8 @@ function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`);
 }
 
-const { proc } = await launchChrome({ port: 9222, headless: true });
-const conn = await connectBrowser(9222);
+const { port, kill } = await launchChrome({ headless: true });
+const conn = await connectBrowser(port);
 let failure = null;
 
 try {
@@ -77,10 +77,9 @@ try {
     hostAfterJoin.players.map((p) => `P${p.slot}`).join(' '));
 
   // --- both consoles log an open connection --------------------------------
-  const hostOpenLog = host.console.some((c) => /data channel open \(control\)/.test(c.text));
-  const guestOpenLog = guest.console.some((c) => /data channel open \(control\)/.test(c.text));
-  check('host console logs an open connection', hostOpenLog);
-  check('guest console logs an open connection', guestOpenLog);
+  const OPEN = /data channel open \(control\)/;
+  check('host console logs an open connection', (await host.waitForConsole(OPEN)) !== null);
+  check('guest console logs an open connection', (await guest.waitForConsole(OPEN)) !== null);
 
   // --- a string typed in A appears in B ------------------------------------
   const phrase = 'ROOM FOR ONE MORE, JACK';
@@ -189,7 +188,7 @@ try {
   console.error('\nverification aborted:', err.message);
 } finally {
   conn.close();
-  proc.kill('SIGKILL');
+  kill();
 }
 
 const failed = checks.filter((c) => !c.ok);

@@ -59,10 +59,16 @@
 
         <ol class="roster" id="roster"></ol>
 
-        <!-- M1 mounts the emulator canvas here; M2 mounts the guest's <video>. -->
+        <!-- Host: the emulator canvas. M2 mounts the guest's <video> alongside. -->
         <div class="stage" id="stage">
-          <p class="stage-placeholder">emulator lands here in M1</p>
+          <canvas id="screen" width="384" height="224" hidden></canvas>
+          <p class="stage-placeholder" id="stage-message">waiting</p>
+          <div class="rom-picker" id="rom-picker" hidden>
+            <p>Select your own <code>dino.zip</code> to start the emulator.</p>
+            <input type="file" id="rom-file" accept=".zip,application/zip" />
+          </div>
         </div>
+        <p class="hud" id="emu-hud" hidden></p>
 
         <form class="chat" id="chat-form">
           <input id="chat-input" placeholder="type a message to test the control channel" autocomplete="off" />

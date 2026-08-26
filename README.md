@@ -15,7 +15,7 @@ back over a data channel. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 | Milestone | | |
 |---|---|---|
 | **M0** | PeerJS handshake | **done, verified** — `npm run verify:m0` |
-| M1 | Emulator boots locally | not started |
+| **M1** | Emulator boots locally | **done, verified** — `npm run verify:m1` |
 | M2 | A/V streaming to guest | not started |
 | M3 | Guest input drives player 2 | not started |
 | M4 | Third player, room UX, latency HUD | not started |
@@ -26,6 +26,9 @@ back over a data channel. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 - Node 20+ (developed on 26)
 - A Chromium or Firefox-based browser
 - Your own legally-dumped MAME `dino` ROM set
+
+No Emscripten toolchain is needed. The emulator core is built ahead of time and
+vendored; see [`tools/core/README.md`](./tools/core/README.md) to rebuild it.
 
 ## Setup
 
@@ -51,6 +54,28 @@ The ROM is not used until M1.
 3. Nothing starts before that click, on purpose — browsers refuse to start an
    `AudioContext` or autoplay audio without a real user gesture, and that click
    is the gesture.
+
+The host's browser is the arcade cabinet: it runs the emulator, and everyone
+else will watch its output over WebRTC from M2 onward.
+
+### Controls (host, player 1)
+
+| | |
+|---|---|
+| move | arrow keys or `WASD` |
+| attack | `Z` |
+| jump | `X` |
+| insert coin | `5` |
+| start | `1` |
+
+Arcade conventions, so `5` then `1` begins a game. Guests get ports 2 and 3
+in M3.
+
+### The ROM, in development vs production
+
+In development, Vite already serves the repo root, so the app reads your
+`roms/dino.zip` directly with no copying and no plugin. A production build has
+no such path and no ROM in the bundle, so it asks you to pick the file.
 
 Up to three players. The host is always player 1 because it owns the emulator;
 guests get 2 and 3 in join order.
@@ -93,25 +118,42 @@ NAT needs TURN, which needs credentials — set the whole ICE list as JSON in
 npm run check        # typecheck + the layering rule
 npm run dev          # in one terminal
 npm run verify:m0    # in another
+npm run verify:m1
 ```
 
-`verify:m0` launches headless Chrome, drives two real tabs with real mouse and
-keyboard events, and asserts the M0 acceptance criteria plus the transport
-facts documented in ARCHITECTURE.md. It writes screenshots to
-`tools/verify/shots/`. It needs the dev server, because it exercises a
-`import.meta.env.DEV`-only hook to force a room-code collision on purpose.
+Both harnesses launch headless Chrome and drive real tabs with real mouse and
+keyboard events — never synthetic `.click()`, so anything gated on user
+activation behaves as it does for a person. Screenshots land in
+`tools/verify/shots/`.
+
+- `verify:m0` asserts the handshake plus the transport facts recorded in
+  ARCHITECTURE.md. It needs the dev server, because it uses an
+  `import.meta.env.DEV`-only hook to force a room-code collision on purpose.
+- `verify:m1` asserts the emulator boots, holds 59.63Hz, renders, and is
+  keyboard-controllable. Controllability is proven twice over: real key events
+  must set the right bits in the input latch, and from an identical savestate a
+  run with input must diverge from one without.
 
 ## Layout
 
 ```
-packages/shared    Transport interface, wire protocol, room codes, PeerJS adapter
-packages/client    Vite app: UI, session, config
-scripts/           check-layering.mjs — enforces the one architectural rule
-tools/verify/      zero-dependency CDP harness for milestone acceptance
+packages/shared            Transport interface, wire protocol, room codes, PeerJS adapter
+packages/client            Vite app: UI, session, config
+  src/emulator/            core wrapper, frame loop, renderer, audio, input latch
+  src/emulator/core/       vendored WASM build output (generated)
+scripts/                   check-layering.mjs — enforces the one architectural rule
+tools/core/                build.sh + shim.c — how the WASM core is produced
+tools/verify/              zero-dependency CDP harness for milestone acceptance
 ```
 
 ## Dependencies
 
-`peerjs`, `vite`, `typescript`. That is the whole list, and the verification
-harness deliberately adds nothing to it — it drives Chrome over the DevTools
-protocol using Node's built-in `WebSocket` and `fetch`.
+`peerjs`, `vite`, `typescript`. That is the whole list.
+
+The emulator core adds nothing to it — it is a WASM module we build and vendor,
+driven by our own code. The verification harness adds nothing either; it drives
+Chrome over the DevTools protocol using Node's built-in `WebSocket` and `fetch`.
+
+The core is FBNeo, which is **not** free software: non-commercial use only, no
+donations, source changes must be published. See
+[`tools/core/README.md`](./tools/core/README.md).

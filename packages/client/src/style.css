@@ -130,8 +130,30 @@ input:focus { outline: 2px solid var(--hot); outline-offset: 1px; }
   border-radius: 8px;
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
-.stage-placeholder { color: #3a3346; margin: 0; }
+.stage-placeholder { color: #6c6382; margin: 0; text-align: center; padding: 1rem; }
+#screen {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* CPS-1 is 384x224 of deliberate pixel art; never let the browser smooth it. */
+  image-rendering: pixelated;
+}
+.rom-picker { text-align: center; color: var(--dim); padding: 1rem; }
+.rom-picker p { margin: 0 0 0.75rem; }
+.rom-picker code { color: var(--hot); }
+.hud {
+  margin: 0.5rem 0 0;
+  font-size: 12px;
+  color: var(--dim);
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+.hud b { color: var(--ink); font-weight: 400; }
+.hud[data-warn='true'] b { color: var(--bad); }
 
 .chat { display: flex; gap: 0.5rem; margin-top: 1rem; }
 .chat input { flex: 1; letter-spacing: normal; }

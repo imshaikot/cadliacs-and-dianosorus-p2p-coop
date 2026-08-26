@@ -1,6 +1,7 @@
 import { formatRoomCode } from '@dino/shared';
 import type { ChannelDiagnostics, TransportStatus } from '@dino/shared';
 
+import type { MachineStats } from './emulator/machine.js';
 import type { LogEntry } from './log.js';
 import type { Player } from './session.js';
 
@@ -15,6 +16,7 @@ export interface UICallbacks {
   onJoin: (rawCode: string) => void;
   onLeave: () => void;
   onChat: (text: string) => void;
+  onRomPicked: (file: File) => void;
 }
 
 export class UI {
@@ -37,6 +39,11 @@ export class UI {
   readonly #logList = must<HTMLOListElement>('log-list');
   readonly #channelTable = must<HTMLPreElement>('channel-table');
   readonly #brokerLine = must<HTMLElement>('broker-line');
+  readonly #screen = must<HTMLCanvasElement>('screen');
+  readonly #stageMessage = must<HTMLElement>('stage-message');
+  readonly #romPicker = must<HTMLElement>('rom-picker');
+  readonly #romFile = must<HTMLInputElement>('rom-file');
+  readonly #hud = must<HTMLElement>('emu-hud');
   #shareText = '';
 
   constructor(cb: UICallbacks) {
@@ -50,6 +57,10 @@ export class UI {
       e.preventDefault();
       cb.onChat(this.#chatInput.value);
       this.#chatInput.value = '';
+    });
+    this.#romFile.addEventListener('change', () => {
+      const file = this.#romFile.files?.[0];
+      if (file) cb.onRomPicked(file);
     });
     this.#btnCopy.addEventListener('click', () => {
       void navigator.clipboard?.writeText(this.#shareText);
@@ -145,6 +156,47 @@ export class UI {
     this.#logList.scrollTop = this.#logList.scrollHeight;
   }
 
+  /** The canvas the emulator blits into. Also what M2 will captureStream(). */
+  get screen(): HTMLCanvasElement {
+    return this.#screen;
+  }
+
+  showStageMessage(message: string): void {
+    this.#stageMessage.textContent = message;
+    this.#stageMessage.hidden = false;
+    this.#screen.hidden = true;
+  }
+
+  showRomPicker(show: boolean): void {
+    this.#romPicker.hidden = !show;
+    this.#stageMessage.hidden = show;
+  }
+
+  showScreen(): void {
+    this.#screen.hidden = false;
+    this.#stageMessage.hidden = true;
+    this.#romPicker.hidden = true;
+  }
+
+  renderHud(stats: MachineStats, targetFps: number): void {
+    this.#hud.hidden = false;
+    // Anything below ~58fps on a 59.63Hz target is visible as slowdown.
+    const behind = stats.emulatedFps > 0 && stats.emulatedFps < targetFps - 1.5;
+    this.#hud.dataset['warn'] = String(behind);
+    this.#hud.replaceChildren(
+      field('emulated', `${stats.emulatedFps.toFixed(1)} / ${targetFps.toFixed(2)} fps`),
+      field('frame cost', `${stats.frameTimeMs.toFixed(2)} ms`),
+      field('frames', String(stats.frames)),
+      field('audio buffer', `${stats.audio.fill} smp`),
+      field('underruns', String(stats.audio.underruns)),
+      field('drift fixes', `${stats.audio.dropped}/${stats.audio.repeated}`),
+    );
+  }
+
+  hideHud(): void {
+    this.#hud.hidden = true;
+  }
+
   renderChannels(rows: ChannelDiagnostics[]): void {
     if (rows.length === 0) {
       this.#channelTable.textContent = 'no peers yet';
@@ -163,6 +215,15 @@ export class UI {
     ]);
     this.#channelTable.textContent = formatTable([header, ...body]);
   }
+}
+
+function field(label: string, value: string): HTMLElement {
+  const span = document.createElement('span');
+  span.append(`${label} `);
+  const b = document.createElement('b');
+  b.textContent = value;
+  span.append(b);
+  return span;
 }
 
 function formatTable(rows: string[][]): string {

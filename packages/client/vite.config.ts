@@ -14,7 +14,7 @@ const sharedEntry = fromHere('../shared/src/index.ts');
 const truthy = (value: string | undefined): boolean =>
   ['1', 'true', 'yes'].includes((value ?? '').trim().toLowerCase());
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   // .env lives at the repo root so there is one place to point the broker.
   const env = loadEnv(mode, repoRoot, 'VITE_');
 
@@ -36,8 +36,18 @@ export default defineConfig(({ mode }) => {
       }
     : {};
 
+  /**
+   * The dev server already serves repo-root files over `/@fs`, so the ROM the
+   * brief asks for at `roms/dino.zip` is reachable with no plugin and no copy.
+   * A production build gets an empty string and falls back to a file picker,
+   * because a ROM is the user's to supply and must never ship in the bundle.
+   */
+  const romFile = env['VITE_ROM_FILE'] ?? 'dino.zip';
+  const devRomUrl = command === 'serve' ? `/@fs${repoRoot}roms/${romFile}` : '';
+
   return {
     envDir: repoRoot,
+    define: { __DEV_ROM_URL__: JSON.stringify(devRomUrl) },
     // The shared package is consumed as TypeScript source, not as a build
     // artifact: one less build step, and edits hot-reload.
     resolve: { alias: { '@dino/shared': sharedEntry } },
