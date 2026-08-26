@@ -186,7 +186,12 @@ export class UI {
     this.#netHud.title = detail;
   }
 
-  renderHud(stats: MachineStats, targetFps: number, net: LockstepStats | null): void {
+  renderHud(
+    stats: MachineStats,
+    targetFps: number,
+    net: LockstepStats | null,
+    link: { rttByPort: Record<number, number | null>; resyncs: number } | null = null,
+  ): void {
     this.#hud.hidden = false;
     // Anything below ~58fps on a 59.63Hz target is visible as slowdown.
     const behind = stats.emulatedFps > 0 && stats.emulatedFps < targetFps - 1.5;
@@ -199,10 +204,14 @@ export class UI {
       field('underruns', String(stats.audio.underruns)),
       field('drift fixes', `${stats.audio.dropped}/${stats.audio.repeated}`),
     );
-    this.#renderNetHud(stats, net);
+    this.#renderNetHud(stats, net, link);
   }
 
-  #renderNetHud(stats: MachineStats, net: LockstepStats | null): void {
+  #renderNetHud(
+    stats: MachineStats,
+    net: LockstepStats | null,
+    link: { rttByPort: Record<number, number | null>; resyncs: number } | null,
+  ): void {
     if (!net || !net.running) {
       if (this.#netHud.dataset['phase'] === undefined) this.#netHud.hidden = true;
       return;
@@ -212,17 +221,38 @@ export class UI {
     const phase = document.createElement('b');
     phase.className = 'phase';
     phase.textContent = stats.stalled ? `stalled on P${net.waitingFor.map((p) => p + 1).join(',P')}` : 'lockstep';
-    const lead = Object.entries(net.leadByPort)
-      .map(([port, frames]) => `P${Number(port) + 1}:${frames >= 0 ? '+' : ''}${frames}`)
-      .join(' ');
-    this.#netHud.replaceChildren(
+    // One column per remote player: how far ahead their input reaches, the
+    // round trip to them, and how ragged their packet arrivals are.
+    const perPeer = Object.keys(net.leadByPort)
+      .map(Number)
+      .filter((port) => port !== net.selfPort)
+      .map((port) => {
+        const rtt = link?.rttByPort[port];
+        const jitter = net.jitterByPort[port];
+        const bits = [`+${net.leadByPort[port] ?? 0}f`];
+        if (rtt != null) bits.push(`${rtt.toFixed(0)}ms rtt`);
+        if (jitter != null) bits.push(`\u00b1${jitter.toFixed(1)}ms`);
+        return `P${port + 1} ${bits.join(' ')}`;
+      });
+
+    const children = [
       phase,
       field('frame', String(net.frame)),
       field('input delay', `${net.delayFrames}f / ${(net.delayFrames * 16.78).toFixed(0)}ms`),
-      field('lead', lead || '—'),
+      ...perPeer.map((text) => field('', text)),
       field('stalls', `${net.stalls} (${net.stalledFrames}f)`),
       field('pkts', `${net.packetsOut}\u2191 ${net.packetsIn}\u2193`),
-    );
+    ];
+    if (link) children.push(field('resyncs', String(link.resyncs)));
+    // Desyncs must be zero. If they are not, that is the most important number
+    // on the page, so it is always shown once it is non-zero.
+    if (net.desyncs > 0) {
+      const d = document.createElement('b');
+      d.className = 'desync';
+      d.textContent = `DESYNCS ${net.desyncs}`;
+      children.push(d);
+    }
+    this.#netHud.replaceChildren(...children);
   }
 
   hideHud(): void {

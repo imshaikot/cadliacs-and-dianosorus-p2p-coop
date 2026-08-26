@@ -159,6 +159,7 @@ input:focus { outline: 2px solid var(--hot); outline-offset: 1px; }
 .netplay[data-phase='stalled'] .phase { color: var(--bad); }
 .netplay[data-phase='syncing'] .phase { color: var(--hot); }
 .netplay[data-phase='solo'] .phase { color: var(--dim); }
+.netplay .desync { color: var(--bad); font-weight: 700; letter-spacing: 0.08em; }
 .hud[data-warn='true'] b { color: var(--bad); }
 
 .chat { display: flex; gap: 0.5rem; margin-top: 1rem; }

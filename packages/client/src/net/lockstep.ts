@@ -1,7 +1,10 @@
 import {
   INPUT_HISTORY_FRAMES,
   MAX_PLAYERS,
+  WireKind,
+  decodeChecksum,
   decodeInput,
+  encodeChecksum,
   encodeInput,
 } from '@dino/shared';
 import type { PeerId, Transport } from '@dino/shared';
@@ -43,12 +46,27 @@ export interface LockstepOptions {
    */
   peerTimeoutMs: number;
   onPeerTimeout?: (ports: number[], stalledMs: number) => void;
+  /** Raised when a peer's checksum disagrees with ours for the same frame. */
+  onDesync?: (frame: number, otherPort: number, mine: number, theirs: number) => void;
 }
+
+/** How often each peer publishes a checksum of its simulation. ~1s. */
+export const CHECKSUM_INTERVAL_FRAMES = 60;
+/**
+ * Multiplier on the peer timeout for a port we have never heard from at all.
+ *
+ * A peer that has been talking and goes quiet is almost certainly gone. A peer
+ * that has never spoken is more likely still finishing its mesh connection —
+ * dropping it on the same short fuse would eject players who were about to
+ * arrive.
+ */
+const UNHEARD_GRACE_MULTIPLIER = 4;
 
 export interface LockstepStats {
   frame: number;
   running: boolean;
   ports: number[];
+  selfPort: number;
   delayFrames: number;
   /** Times we could not advance because someone's input had not arrived. */
   stalls: number;
@@ -58,6 +76,10 @@ export interface LockstepStats {
   waitingFor: number[];
   /** How far ahead of the simulated frame each port's input reaches. */
   leadByPort: Record<number, number>;
+  /** Per-port input packet arrival jitter, milliseconds. */
+  jitterByPort: Record<number, number>;
+  /** Times a peer's checksum disagreed with ours. Should be zero, always. */
+  desyncs: number;
   packetsIn: number;
   packetsOut: number;
   bytesIn: number;
@@ -74,6 +96,13 @@ export class Lockstep {
   #peerTimeoutMs: number;
   #onPeerTimeout: ((ports: number[], stalledMs: number) => void) | undefined;
   #stallSince = 0;
+  #everHeard = new Set<number>();
+  #onDesync: LockstepOptions['onDesync'];
+  #myChecksums = new Map<number, number>();
+  #desyncs = 0;
+  /** Per-port packet arrival times, for the jitter figure in the HUD. */
+  #lastArrival = new Map<number, number>();
+  #jitterMs = new Map<number, number>();
 
   #ports: number[] = [];
   #running = false;
@@ -97,6 +126,7 @@ export class Lockstep {
     this.#onStallChange = options.onStallChange;
     this.#peerTimeoutMs = options.peerTimeoutMs;
     this.#onPeerTimeout = options.onPeerTimeout;
+    this.#onDesync = options.onDesync;
   }
 
   get running(): boolean {
@@ -126,6 +156,9 @@ export class Lockstep {
     this.#waitingFor = [];
     this.#wasStalled = false;
     this.#stallSince = 0;
+    this.#everHeard.clear();
+    this.#myChecksums.clear();
+    this.#lastArrival.clear();
 
     // Nobody has pressed anything for the first `delay` frames yet, by
     // definition — those frames are already in flight. Publish them as neutral
@@ -165,7 +198,7 @@ export class Lockstep {
         this.#wasStalled = true;
         this.#stallSince = now;
         this.#onStallChange?.(true, this.#waitingFor);
-      } else if (this.#stallSince > 0 && now - this.#stallSince > this.#peerTimeoutMs) {
+      } else if (this.#stallSince > 0 && now - this.#stallSince > this.#timeoutFor(this.#waitingFor)) {
         const stalledMs = now - this.#stallSince;
         // Fire once, then hold off: the handler will resync or go solo, and
         // repeating every frame would stampede it.
@@ -185,6 +218,29 @@ export class Lockstep {
     this.#scratch.fill(0);
     for (const port of this.#ports) this.#scratch[port] = this.timeline.get(frame, port);
     return this.#scratch;
+  }
+
+  /** A peer we have never heard from gets a longer rope than one that went quiet. */
+  #timeoutFor(ports: readonly number[]): number {
+    const anyUnheard = ports.some((p) => !this.#everHeard.has(p));
+    return anyUnheard ? this.#peerTimeoutMs * UNHEARD_GRACE_MULTIPLIER : this.#peerTimeoutMs;
+  }
+
+  /**
+   * Publish a checksum of our own simulation, and check it against any peer
+   * checksum we already hold for that frame.
+   */
+  publishChecksum(frame: number, hash: number): void {
+    if (!this.#running || frame % CHECKSUM_INTERVAL_FRAMES !== 0) return;
+    this.#myChecksums.set(frame, hash);
+    // Keep only a few seconds' worth.
+    for (const f of this.#myChecksums.keys()) {
+      if (f < frame - CHECKSUM_INTERVAL_FRAMES * 8) this.#myChecksums.delete(f);
+    }
+    const packet = encodeChecksum(frame, this.#selfPort, hash);
+    this.#transport.sendInput(packet);
+    this.#packetsOut += 1;
+    this.#bytesOut += packet.byteLength;
   }
 
   /** Counts wall time lost while blocked, for the HUD. */
@@ -217,12 +273,26 @@ export class Lockstep {
     this.#bytesOut += packet.byteLength;
   }
 
-  /** Feed every inbound input packet here. Unknown kinds are ignored. */
+  /** Feed every inbound binary message here. Unknown kinds are ignored. */
   acceptInput(_from: PeerId, bytes: Uint8Array): boolean {
+    if (bytes[0] === WireKind.Checksum) {
+      const cs = decodeChecksum(bytes);
+      if (!cs || cs.port === this.#selfPort) return true;
+      this.#packetsIn += 1;
+      this.#bytesIn += bytes.byteLength;
+      const mine = this.#myChecksums.get(cs.frame);
+      if (mine !== undefined && mine !== cs.hash) {
+        this.#desyncs += 1;
+        this.#onDesync?.(cs.frame, cs.port, mine, cs.hash);
+      }
+      return true;
+    }
     const packet = decodeInput(bytes);
     if (!packet) return false;
     this.#packetsIn += 1;
     this.#bytesIn += bytes.byteLength;
+    this.#everHeard.add(packet.port);
+    this.#noteArrival(packet.port);
     // Our own port never arrives from the wire; ignoring it defends against a
     // peer with a stale roster clobbering our authoritative local input.
     if (packet.port === this.#selfPort) return true;
@@ -234,13 +304,36 @@ export class Lockstep {
     return true;
   }
 
+  /**
+   * Packet arrival jitter, as an exponential mean of how far each gap strays
+   * from the 16.78ms one. Steady numbers mean a healthy link; a rising figure
+   * is what precedes stalls.
+   */
+  #noteArrival(port: number): void {
+    const now = performance.now();
+    const last = this.#lastArrival.get(port);
+    this.#lastArrival.set(port, now);
+    if (last === undefined) return;
+    const deviation = Math.abs(now - last - 1000 / 59.63);
+    const prev = this.#jitterMs.get(port) ?? deviation;
+    this.#jitterMs.set(port, prev * 0.9 + deviation * 0.1);
+  }
+
   stats(frame: number): LockstepStats {
     const leadByPort: Record<number, number> = {};
-    for (const port of this.#ports) leadByPort[port] = this.timeline.newestFor(port) - frame;
+    const jitterByPort: Record<number, number> = {};
+    for (const port of this.#ports) {
+      leadByPort[port] = this.timeline.newestFor(port) - frame;
+      const j = this.#jitterMs.get(port);
+      if (j !== undefined) jitterByPort[port] = Math.round(j * 10) / 10;
+    }
     return {
+      desyncs: this.#desyncs,
+      jitterByPort,
       frame,
       running: this.#running,
       ports: [...this.#ports],
+      selfPort: this.#selfPort,
       delayFrames: this.#delay,
       stalls: this.#stalls,
       stalledFrames: this.#stalledFrames,

@@ -71,6 +71,15 @@ export interface Transport {
   /** What the underlying data channels actually negotiated. See gotcha #1. */
   describeChannels(): ChannelDiagnostics[];
 
+  /**
+   * Open a connection to another peer we were told about.
+   *
+   * V1 needs a full mesh, not a star: with three players, routing P2's input to
+   * P3 through the host would cost two hops on the one thing most sensitive to
+   * latency. Idempotent — dialling a peer we already have is a no-op.
+   */
+  dial(peerId: PeerId): void;
+
   /** Drop one peer without tearing down the whole transport. */
   disconnectPeer(peerId: PeerId, reason?: string): void;
 

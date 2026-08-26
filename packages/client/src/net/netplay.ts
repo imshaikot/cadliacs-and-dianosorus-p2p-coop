@@ -9,7 +9,7 @@ import type { ControlMessage, PeerId } from '@dino/shared';
 import type { Machine } from '../emulator/machine.js';
 import type { Log } from '../log.js';
 import type { Session } from '../session.js';
-import { Lockstep } from './lockstep.js';
+import { CHECKSUM_INTERVAL_FRAMES, Lockstep } from './lockstep.js';
 
 /**
  * Ties the emulator to the network.
@@ -73,6 +73,7 @@ export class Netplay {
   #phase: NetplayStatus['phase'] = 'solo';
   #detail = 'running solo';
   #resyncs = 0;
+  #rttByPort: Record<number, number | null> = {};
   #onStatus: ((s: NetplayStatus) => void) | null = null;
   #unsubscribes: Array<() => void> = [];
 
@@ -90,6 +91,7 @@ export class Netplay {
       onStallChange: (stalled, waitingFor) => this.#onStall(stalled, waitingFor),
       peerTimeoutMs: options.peerTimeoutMs,
       onPeerTimeout: (ports, stalledMs) => this.#onPeerTimeout(ports, stalledMs),
+      onDesync: (frame, otherPort, mine, theirs) => this.#onDesync(frame, otherPort, mine, theirs),
     });
     this.#readyPorts.add(this.#selfPort);
   }
@@ -104,6 +106,25 @@ export class Netplay {
     return this.#selfPort;
   }
 
+  /** Candidate-pair RTT per emulator port, refreshed by refreshLinkStats(). */
+  get rttByPort(): Record<number, number | null> {
+    return this.#rttByPort;
+  }
+
+  /**
+   * getStats() is comparatively expensive and its numbers move slowly, so this
+   * is polled about once a second rather than on the HUD's own cadence.
+   */
+  async refreshLinkStats(): Promise<void> {
+    const stats = await this.#session.peerStats();
+    const out: Record<number, number | null> = {};
+    for (const [peerId, s] of Object.entries(stats)) {
+      const port = this.#session.portForPeer(peerId);
+      if (port !== null) out[port] = s?.rttMs ?? null;
+    }
+    this.#rttByPort = out;
+  }
+
   onStatus(cb: (s: NetplayStatus) => void): void {
     this.#onStatus = cb;
   }
@@ -114,7 +135,41 @@ export class Netplay {
       t.onInput((from, bytes) => this.#onWire(from, bytes)),
       t.onControl((from, msg) => this.#onControl(from, msg)),
       t.onPeerLeave((peerId, reason) => this.#onPeerLeave(peerId, reason)),
+      this.#machine.frameAdvanced.on((frame) => this.#onFrameAdvanced(frame)),
     );
+  }
+
+  /**
+   * Once a second, checksum our own simulation and publish it.
+   *
+   * Lockstep is only correct while every peer really does compute the same
+   * frame. Nothing enforces that — it is a property we believe holds, and a
+   * silent violation turns one game into two without any error anywhere. This
+   * is the thing that would tell us.
+   */
+  #onFrameAdvanced(frame: number): void {
+    if (!this.lockstep.running || frame % CHECKSUM_INTERVAL_FRAMES !== 0) return;
+    this.lockstep.publishChecksum(frame, hashState(this.#machine.core.serialize()));
+  }
+
+  #onDesync(frame: number, otherPort: number, mine: number, theirs: number): void {
+    this.#log.error('DESYNC: a peer computed a different frame', {
+      frame,
+      otherPort,
+      mine: mine.toString(16),
+      theirs: theirs.toString(16),
+    });
+    if (this.#session.role === 'host') {
+      // A resync is also the repair: everyone restores from one state again.
+      this.#maybeResync(`desync at frame ${frame} with port ${otherPort}`);
+    } else {
+      this.#session.transport.sendControl({
+        t: 'desync',
+        frame,
+        myPort: this.#selfPort,
+        otherPort,
+      });
+    }
   }
 
   detach(): void {
@@ -180,6 +235,16 @@ export class Netplay {
         };
         this.#setStatus('syncing', `waiting for the state at frame ${msg.frame}`);
         this.#tryApply();
+        return;
+      }
+      case 'desync': {
+        if (this.#session.role !== 'host') return;
+        this.#log.error('a guest reported a desync, resyncing everyone', {
+          peerId: from,
+          frame: msg.frame,
+          between: [msg.myPort, msg.otherPort],
+        });
+        this.#maybeResync(`desync reported at frame ${msg.frame}`);
         return;
       }
       case 'begun': {
@@ -356,4 +421,20 @@ export class Netplay {
   get status(): NetplayStatus {
     return { phase: this.#phase, detail: this.#detail };
   }
+}
+
+/**
+ * FNV-1a over a stride of the savestate.
+ *
+ * Every seventh byte of 269KB is ~38K samples — more than enough to catch a
+ * divergence, since a desynced emulator differs in far more than one byte, and
+ * it keeps the per-second cost negligible.
+ */
+function hashState(state: Uint8Array): number {
+  let h = 2166136261;
+  for (let i = 0; i < state.length; i += 7) {
+    h ^= state[i] as number;
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }

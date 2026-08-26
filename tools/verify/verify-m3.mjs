@@ -24,14 +24,14 @@ function check(name, ok, detail = '') {
 const INSTALL_PROBE = `(() => {
   const m = window.__dino.machine();
   window.__syncProbe = [];
-  m.onFrame = (frame) => {
+  m.frameAdvanced.on((frame) => {
     if (frame % 5 !== 0) return;
     const v = m.core.video();
     let h = 2166136261;
     for (let i = 0; i < v.pixels.length; i += 61) { h ^= v.pixels[i]; h = Math.imul(h, 16777619); }
     window.__syncProbe.push([frame, (h >>> 0).toString(16)]);
     if (window.__syncProbe.length > 2000) window.__syncProbe.shift();
-  };
+  });
   return true;
 })()`;
 
@@ -93,8 +93,8 @@ try {
   const guest = await Tab.create(conn, APP, 'GUEST');
   await guest.typeInto('#input-code', boot.roomCode);
   await guest.clickSelector('#btn-join');
-  await guest.waitFor('window.__dino.snapshot().netplay?.phase === "lockstep"', 120000, 'guest in lockstep');
-  await host.waitFor('window.__dino.snapshot().netplay?.phase === "lockstep"', 60000, 'host in lockstep');
+  await guest.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest in lockstep');
+  await host.waitFor('window.__dino.snapshot().netplay?.running === true', 60000, 'host in lockstep');
   check('both peers in lockstep', true);
 
   await host.eval(INSTALL_PROBE);

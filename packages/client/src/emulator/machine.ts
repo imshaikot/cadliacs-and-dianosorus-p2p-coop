@@ -1,3 +1,5 @@
+import { Signal } from '@dino/shared';
+
 import { EmulatorAudio } from './audio.js';
 import type { AudioStats } from './audio.js';
 import { FbneoCore } from './fbneo.js';
@@ -65,14 +67,14 @@ export class Machine {
 
   #onLog: ((line: string) => void) | undefined;
   /**
-   * Called after each simulated frame, with the frame number just completed.
+   * Fires after each simulated frame, with the frame number just completed.
    *
-   * This is the hook desync detection hangs off: in lockstep every peer must
-   * compute an identical frame N, so a periodic checksum taken here and
-   * compared across peers is what turns a silent divergence into a reported
-   * one. Verification uses it for exactly that.
+   * A signal rather than a single callback because two things legitimately want
+   * it at once: desync detection checksums the state here, and verification
+   * hangs its own frame probe off the same hook. One slot would mean whichever
+   * registered last silently won.
    */
-  onFrame: ((frame: number) => void) | null = null;
+  readonly frameAdvanced = new Signal<[number]>();
   #raf = 0;
   #running = false;
   #last = 0;
@@ -262,7 +264,7 @@ export class Machine {
     this.audio.push(this.core.audio());
     this.#frames += 1;
     this.#frame += 1;
-    this.onFrame?.(this.#frame - 1);
+    this.frameAdvanced.emit(this.#frame - 1);
     return true;
   }
 

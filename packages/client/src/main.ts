@@ -72,6 +72,12 @@ async function begin(role: 'host' | 'guest', roomCode: string): Promise<void> {
   session = next;
 
   next.roster.on((players) => ui.renderRoster(players));
+  // Being refused is not an error state to sit in: go back to the landing page
+  // and say why, rather than leaving someone staring at a room they are not in.
+  next.rejected.on((reason) => {
+    log.warn('the host turned us away', { reason });
+    void teardown(`rejected: ${reason}`).then(() => ui.showError(`Could not join: ${reason}`));
+  });
   next.chat.on((entry) => ui.appendChat(entry));
   next.statusChanged.on((status, detail) => ui.setStatus(status, detail));
 
@@ -215,9 +221,22 @@ function onCoreLog(line: string): void {
 
 function startHud(): void {
   if (hudTimer !== null) return;
+  let sinceLinkPoll = 0;
   hudTimer = window.setInterval(() => {
     if (!machine) return;
-    ui.renderHud(machine.stats, machine.core.fps, netplay?.lockstep.stats(machine.frame) ?? null);
+    const net = netplay;
+    ui.renderHud(
+      machine.stats,
+      machine.core.fps,
+      net?.lockstep.stats(machine.frame) ?? null,
+      net ? { rttByPort: net.rttByPort, resyncs: net.resyncs } : null,
+    );
+    // getStats() is not cheap and its numbers barely move; once a second is plenty.
+    sinceLinkPoll += 250;
+    if (net && sinceLinkPoll >= 1000) {
+      sinceLinkPoll = 0;
+      void net.refreshLinkStats();
+    }
   }, 250);
 }
 
@@ -338,7 +357,12 @@ window.__dino = {
       ? { running: machine.running, targetFps: machine.core.fps, sampleRate: machine.core.sampleRate, ...machine.stats }
       : null,
     netplay: netplay && machine
-      ? { ...netplay.status, resyncs: netplay.resyncs, selfPort: netplay.selfPort, ...netplay.lockstep.stats(machine.frame) }
+      ? {
+          ...netplay.status,
+          ...netplay.lockstep.stats(machine.frame),
+          resyncs: netplay.resyncs,
+          rttByPort: netplay.rttByPort,
+        }
       : null,
     logCount: log.entries.length,
   }),

@@ -23,14 +23,14 @@ function check(name, ok, detail = '') {
 const INSTALL_PROBE = `(() => {
   const m = window.__dino.machine();
   window.__syncProbe = [];
-  m.onFrame = (frame) => {
+  m.frameAdvanced.on((frame) => {
     if (frame % 10 !== 0) return;
     const v = m.core.video();
     let h = 2166136261;
     for (let i = 0; i < v.pixels.length; i += 61) { h ^= v.pixels[i]; h = Math.imul(h, 16777619); }
     window.__syncProbe.push([frame, (h >>> 0).toString(16)]);
     if (window.__syncProbe.length > 800) window.__syncProbe.shift();
-  };
+  });
   return true;
 })()`;
 
@@ -65,17 +65,17 @@ try {
 
   // --- both reach lockstep -------------------------------------------------
   const hostNet = await host.waitFor(
-    'window.__dino.snapshot().netplay?.phase === "lockstep" && window.__dino.snapshot().netplay',
+    'window.__dino.snapshot().netplay?.running === true && window.__dino.snapshot().netplay',
     60000,
     'host in lockstep',
   );
   const guestNet = await guest.waitFor(
-    'window.__dino.snapshot().netplay?.phase === "lockstep" && window.__dino.snapshot().netplay',
+    'window.__dino.snapshot().netplay?.running === true && window.__dino.snapshot().netplay',
     60000,
     'guest in lockstep',
   );
-  check('host reaches lockstep', hostNet.phase === 'lockstep', `ports ${hostNet.ports}, delay ${hostNet.delayFrames}f`);
-  check('guest reaches lockstep', guestNet.phase === 'lockstep', `ports ${guestNet.ports}, delay ${guestNet.delayFrames}f`);
+  check('host reaches lockstep', hostNet.running === true, `ports ${hostNet.ports}, delay ${hostNet.delayFrames}f`);
+  check('guest reaches lockstep', guestNet.running === true, `ports ${guestNet.ports}, delay ${guestNet.delayFrames}f`);
   check('both agree on the live port set', JSON.stringify(hostNet.ports) === JSON.stringify(guestNet.ports),
     `${JSON.stringify(hostNet.ports)} vs ${JSON.stringify(guestNet.ports)}`);
   check('host drives port 0, guest port 1', hostNet.selfPort === 0 && guestNet.selfPort === 1);

@@ -20,7 +20,7 @@ local, so there is no display latency — only input delay — and it costs abou
 | **M1** | Emulator boots locally | **done, verified** — `npm run verify:m1` |
 | **M2′** | Every peer runs the game, in lockstep | **done, verified** — `npm run verify:m2` |
 | **M3′** | Guest input drives player 2 on both screens | **done, verified** — `npm run verify:m3` |
-| M4′ | Third player, desync detection, HUD | not started |
+| **M4′** | Third player, desync detection, HUD | **done, verified** — `npm run verify:m4` |
 | M5 | Docs and deploy notes | not started |
 
 ## Requirements
@@ -129,6 +129,9 @@ npm run verify:m0    # in another
 npm run verify:m1
 npm run verify:m2
 npm run verify:m3
+npm run verify:m4
+
+npm run verify            # all of the above, in order
 ```
 
 Both harnesses launch headless Chrome and drive real tabs with real mouse and
@@ -151,6 +154,9 @@ activation behaves as it does for a person. Screenshots land in
   Peers are compared at the same **frame number**, never at the same instant —
   with input delay they legitimately sit a frame or two apart in wall-clock
   terms while being perfectly in sync.
+- `verify:m4` runs three players: full mesh, all three simulations identical
+  while all three play, desync detector reporting zero, a fourth player turned
+  away, one player leaving, and finally the host itself vanishing.
 
 ## Layout
 

@@ -265,11 +265,37 @@ export class PeerJsTransport implements Transport {
         this.#status.emit('closed', 'broker connection closed');
       });
 
-      if (this.role === 'host') {
-        peer.on('connection', (conn) => this.#onIncomingData(conn));
-      }
+      // Every peer accepts connections, not just the host: in a mesh a guest is
+      // dialled by its fellow guests too.
+      peer.on('connection', (conn) => this.#onIncomingData(conn));
       peer.on('call', (call) => this.#onIncomingCall(call));
     });
+  }
+
+  dial(peerId: PeerId): void {
+    if (this.#closed || !this.#peer || peerId === this.#selfId) return;
+    const record = this.#recordFor(peerId);
+    // Already connected, or a dial is already in flight.
+    if (record.control) return;
+    const metadata = { label: this.#label };
+    this.#adoptControl(
+      record,
+      this.#peer.connect(peerId, {
+        label: CONTROL_LABEL,
+        serialization: CONTROL_SERIALIZATION,
+        reliable: true,
+        metadata,
+      }),
+    );
+    this.#adoptInput(
+      record,
+      this.#peer.connect(peerId, {
+        label: INPUT_LABEL,
+        serialization: INPUT_SERIALIZATION,
+        reliable: false,
+        metadata,
+      }),
+    );
   }
 
   disconnectPeer(peerId: PeerId, reason = 'disconnected by local peer'): void {

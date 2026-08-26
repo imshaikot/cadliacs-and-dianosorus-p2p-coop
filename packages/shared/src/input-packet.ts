@@ -8,6 +8,7 @@
 export const WireKind = {
   Input: 0x01,
   StateChunk: 0x02,
+  Checksum: 0x03,
 } as const;
 
 export const INPUT_HEADER_BYTES = 7;
@@ -106,6 +107,38 @@ export function* chunkState(transferId: number, state: Uint8Array): Generator<Ui
       state.subarray(start, Math.min(start + STATE_CHUNK_PAYLOAD, state.length)),
     );
   }
+}
+
+export const CHECKSUM_BYTES = 10;
+
+export interface ChecksumMessage {
+  frame: number;
+  port: number;
+  hash: number;
+}
+
+/**
+ * A periodic "here is what my simulation looks like at frame N".
+ *
+ * Lockstep is only correct as long as every peer really does compute identical
+ * frames. If that ever stops being true the game does not crash — it quietly
+ * becomes two different games, which is far worse. Exchanging a cheap checksum
+ * once a second turns a silent divergence into a reported one.
+ */
+export function encodeChecksum(frame: number, port: number, hash: number): Uint8Array {
+  const buf = new Uint8Array(CHECKSUM_BYTES);
+  const view = new DataView(buf.buffer);
+  buf[0] = WireKind.Checksum;
+  buf[1] = port & 0xff;
+  view.setUint32(2, frame >>> 0, true);
+  view.setUint32(6, hash >>> 0, true);
+  return buf;
+}
+
+export function decodeChecksum(bytes: Uint8Array): ChecksumMessage | null {
+  if (bytes.length < CHECKSUM_BYTES || bytes[0] !== WireKind.Checksum) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { port: bytes[1] ?? 0, frame: view.getUint32(2, true), hash: view.getUint32(6, true) };
 }
 
 /** Reassembles chunks that may arrive in any order. */

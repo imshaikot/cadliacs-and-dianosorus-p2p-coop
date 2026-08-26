@@ -30,6 +30,13 @@ export type ControlMessage =
   | { t: 'reject'; reason: string }
   /** either direction, on deliberate teardown. */
   | { t: 'bye'; reason: string }
+  /**
+   * host -> everyone: the full membership of the room.
+   *
+   * Guests cannot discover each other through the broker — they only ever knew
+   * the host's ID — so the host introduces them. Sent on every change.
+   */
+  | { t: 'roster'; players: Array<{ peerId: string; slot: PlayerSlot; label: string }> }
   /** guest -> host: my core is up and I have a ROM, deal me in. */
   | { t: 'ready'; port: number }
   /**
@@ -42,6 +49,8 @@ export type ControlMessage =
    * construction, rather than each guessing when a departed peer stopped.
    */
   | { t: 'begin'; frame: number; transferId: number; ports: number[]; delayFrames: number; reason: string }
+  /** any -> host: my simulation disagrees with a peer's at this frame. */
+  | { t: 'desync'; frame: number; myPort: number; otherPort: number }
   /** guest -> host: restored and ready to run `frame`. */
   | { t: 'begun'; frame: number; port: number }
   /**
@@ -69,12 +78,14 @@ export function decodeControl(raw: unknown): ControlMessage | null {
   if (typeof t !== 'string') return null;
   switch (t) {
     case 'hello':
+    case 'roster':
     case 'welcome':
     case 'reject':
     case 'bye':
     case 'ready':
     case 'begin':
     case 'begun':
+    case 'desync':
     case 'chat':
       return parsed as ControlMessage;
     default:

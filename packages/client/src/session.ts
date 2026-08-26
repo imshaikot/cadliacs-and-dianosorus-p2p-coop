@@ -56,8 +56,11 @@ export class Session {
   readonly #label: string;
 
   #players = new Map<PeerId, Player>();
+  /** Slots learned from the host's roster, which may arrive before the peer. */
+  #knownSlots = new Map<PeerId, PlayerSlot>();
   #selfId: PeerId | null = null;
   #selfSlot: PlayerSlot | null = null;
+  #rejectedReason: string | null = null;
   #roomCode: string;
   #status: TransportStatus = 'idle';
   #unsubscribes: Unsubscribe[] = [];
@@ -65,6 +68,8 @@ export class Session {
   readonly roster = new Signal<[Player[]]>();
   readonly chat = new Signal<[{ from: PeerId; label: string; text: string; mine: boolean }]>();
   readonly statusChanged = new Signal<[TransportStatus, string]>();
+  /** The host refused us — room full, or a protocol mismatch. */
+  readonly rejected = new Signal<[string]>();
 
   constructor(options: SessionOptions) {
     this.role = options.role;
@@ -107,15 +112,26 @@ export class Session {
    */
   waitForSlot(timeoutMs = 15000): Promise<PlayerSlot> {
     if (this.#selfSlot !== null) return Promise.resolve(this.#selfSlot);
+    if (this.#rejectedReason !== null) return Promise.reject(new Error(this.#rejectedReason));
     return new Promise((resolve, reject) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        unRoster();
+        unRejected();
+      };
       const timer = setTimeout(() => {
-        un();
+        done();
         reject(new Error('the host never assigned us a player slot'));
       }, timeoutMs);
-      const un = this.roster.on(() => {
+      // Being turned away is an answer too, and a much faster one than waiting
+      // out the timeout.
+      const unRejected = this.rejected.on((reason) => {
+        done();
+        reject(new Error(reason));
+      });
+      const unRoster = this.roster.on(() => {
         if (this.#selfSlot === null) return;
-        clearTimeout(timer);
-        un();
+        done();
         resolve(this.#selfSlot);
       });
     });
@@ -165,9 +181,11 @@ export class Session {
       t.onError((err) => this.#onError(err)),
       t.onPeerJoin((peer) => {
         this.#log.net('peer channel open', { peerId: peer.id, label: peer.label });
-        // The host waits for `hello` before handing out a slot; the guest treats
-        // the host as player 1 immediately.
-        if (this.role === 'guest') {
+        // The host waits for `hello` before handing out a slot. A guest seats
+        // the peer it dialled as the host only if it does not already know
+        // better from a roster — in a mesh, a guest's peers include other
+        // guests, and assuming every peer is player 1 would be wrong.
+        if (this.role === 'guest' && !this.#players.has(peer.id) && !this.#knownSlots.has(peer.id)) {
           this.#addPlayer({
             peerId: peer.id,
             slot: HOST_SLOT,
@@ -180,8 +198,10 @@ export class Session {
       t.onPeerLeave((peerId, reason) => {
         const player = this.#players.get(peerId);
         this.#players.delete(peerId);
+        this.#knownSlots.delete(peerId);
         this.#log.net('peer left', { peerId, slot: player?.slot ?? null, reason });
         this.roster.emit(this.players);
+        this.#broadcastRoster();
       }),
       t.onControl((from, msg) => this.#onControl(from, msg)),
     );
@@ -218,6 +238,7 @@ export class Session {
           from,
         );
         this.#log.info(`player ${slot} joined`, { peerId: from, label: msg.label });
+        this.#broadcastRoster();
         return;
       }
       case 'welcome': {
@@ -235,9 +256,16 @@ export class Session {
         this.#log.info(`host assigned us player ${msg.slot}`, { host: from });
         return;
       }
+      case 'roster': {
+        if (this.role !== 'guest') return;
+        this.#applyRoster(msg.players);
+        return;
+      }
       case 'reject': {
         this.#log.error('host rejected us', { reason: msg.reason });
+        this.#rejectedReason = msg.reason;
         this.statusChanged.emit('error', msg.reason);
+        this.rejected.emit(msg.reason);
         return;
       }
       case 'bye': {
@@ -256,6 +284,56 @@ export class Session {
   #onError(err: TransportError): void {
     const fn = err.fatal ? this.#log.error.bind(this.#log) : this.#log.warn.bind(this.#log);
     fn(`transport error: ${err.code}`, { message: err.message, peerId: err.peerId });
+  }
+
+  /** Host only: tell everyone who is in the room, so guests can find each other. */
+  #broadcastRoster(): void {
+    if (this.role !== 'host') return;
+    this.#transport.sendControl({
+      t: 'roster',
+      players: this.players.map((p) => ({ peerId: p.peerId, slot: p.slot, label: p.label })),
+    });
+  }
+
+  /**
+   * Guest side of the mesh. The host names everyone; we seat them and dial the
+   * ones we are not connected to yet.
+   *
+   * Both ends of a pair would otherwise dial each other at the same moment and
+   * end up with two connections, so the lower peer ID does the dialling and the
+   * higher one waits. Arbitrary, but both sides agree on it without talking.
+   */
+  #applyRoster(entries: Array<{ peerId: PeerId; slot: PlayerSlot; label: string }>): void {
+    const selfId = this.#selfId;
+    if (selfId === null) return;
+    for (const entry of entries) {
+      this.#knownSlots.set(entry.peerId, entry.slot);
+      if (entry.peerId === selfId) continue;
+      const existing = this.#players.get(entry.peerId);
+      if (existing) {
+        existing.slot = entry.slot;
+        existing.label = entry.label || existing.label;
+      } else {
+        this.#players.set(entry.peerId, {
+          peerId: entry.peerId,
+          slot: entry.slot,
+          label: entry.label || entry.peerId,
+          isSelf: false,
+          joinedAt: Date.now(),
+        });
+      }
+      if (selfId < entry.peerId) this.#transport.dial(entry.peerId);
+    }
+    // Anyone the host no longer lists has left.
+    const live = new Set([selfId, ...entries.map((e) => e.peerId)]);
+    for (const id of [...this.#players.keys()]) {
+      if (!live.has(id)) {
+        this.#players.delete(id);
+        this.#knownSlots.delete(id);
+      }
+    }
+    this.#log.net('roster updated', { players: entries.map((e) => `P${e.slot}`) });
+    this.roster.emit(this.players);
   }
 
   #allocateSlot(): PlayerSlot | null {
