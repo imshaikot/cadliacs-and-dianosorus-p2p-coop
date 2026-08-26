@@ -19,7 +19,7 @@ local, so there is no display latency — only input delay — and it costs abou
 | **M0** | PeerJS handshake | **done, verified** — `npm run verify:m0` |
 | **M1** | Emulator boots locally | **done, verified** — `npm run verify:m1` |
 | **M2′** | Every peer runs the game, in lockstep | **done, verified** — `npm run verify:m2` |
-| M3′ | Guest input drives player 2 on both screens | not started |
+| **M3′** | Guest input drives player 2 on both screens | **done, verified** — `npm run verify:m3` |
 | M4′ | Third player, desync detection, HUD | not started |
 | M5 | Docs and deploy notes | not started |
 
@@ -127,6 +127,8 @@ npm run check        # typecheck + the layering rule
 npm run dev          # in one terminal
 npm run verify:m0    # in another
 npm run verify:m1
+npm run verify:m2
+npm run verify:m3
 ```
 
 Both harnesses launch headless Chrome and drive real tabs with real mouse and
@@ -141,6 +143,14 @@ activation behaves as it does for a person. Screenshots land in
   keyboard-controllable. Controllability is proven twice over: real key events
   must set the right bits in the input latch, and from an identical savestate a
   run with input must diverge from one without.
+- `verify:m2` asserts two peers each boot their own emulator, reach lockstep,
+  and compute **identical frames**, then kills one peer's tab outright and
+  asserts the other recovers and keeps running.
+- `verify:m3` asserts the guest's keyboard drives player 2 on *both* machines,
+  with both players acting at once, and that the two simulations never diverge.
+  Peers are compared at the same **frame number**, never at the same instant —
+  with input delay they legitimately sit a frame or two apart in wall-clock
+  terms while being perfectly in sync.
 
 ## Layout
 

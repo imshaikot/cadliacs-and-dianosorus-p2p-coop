@@ -17,7 +17,8 @@
     "check": "npm run typecheck && npm run lint:layering",
     "verify:m0": "node tools/verify/verify-m0.mjs",
     "verify:m1": "node tools/verify/verify-m1.mjs",
-    "verify:m2": "node tools/verify/verify-m2.mjs"
+    "verify:m2": "node tools/verify/verify-m2.mjs",
+    "verify:m3": "node tools/verify/verify-m3.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
