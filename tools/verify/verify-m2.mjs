@@ -22,7 +22,7 @@ function check(name, ok, detail = '') {
 
 /** Records (frame, checksum) every 10th frame, straight off the machine hook. */
 const INSTALL_PROBE = `(() => {
-  const m = window.__dino.machine();
+  const m = window.__retro.machine();
   window.__syncProbe = [];
   m.frameAdvanced.on((frame) => {
     if (frame % 10 !== 0) return;
@@ -44,7 +44,7 @@ try {
   const host = await Tab.create(conn, APP, 'HOST');
   await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const hostBoot = await host.waitFor(
-    'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
+    'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
     'host emulator running',
   );
@@ -55,7 +55,7 @@ try {
   await joinGame(guest, roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
 
   const guestBoot = await guest.waitFor(
-    'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
+    'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
     'guest emulator running',
   );
@@ -65,12 +65,12 @@ try {
 
   // --- both reach lockstep -------------------------------------------------
   const hostNet = await host.waitFor(
-    'window.__dino.snapshot().netplay?.running === true && window.__dino.snapshot().netplay',
+    'window.__retro.snapshot().netplay?.running === true && window.__retro.snapshot().netplay',
     60000,
     'host in lockstep',
   );
   const guestNet = await guest.waitFor(
-    'window.__dino.snapshot().netplay?.running === true && window.__dino.snapshot().netplay',
+    'window.__retro.snapshot().netplay?.running === true && window.__retro.snapshot().netplay',
     60000,
     'guest in lockstep',
   );
@@ -101,15 +101,15 @@ try {
   );
 
   // --- both are actually advancing, not just frozen together ---------------
-  const h1 = await host.eval('window.__dino.snapshot().emulator.frame');
+  const h1 = await host.eval('window.__retro.snapshot().emulator.frame');
   await sleep(3000);
-  const h2 = await host.eval('window.__dino.snapshot().emulator.frame');
-  const g2 = await guest.eval('window.__dino.snapshot().emulator.frame');
+  const h2 = await host.eval('window.__retro.snapshot().emulator.frame');
+  const g2 = await guest.eval('window.__retro.snapshot().emulator.frame');
   const advancedFps = ((h2 - h1) * 1000) / 3000;
   check('lockstep still runs near full speed', advancedFps > 55, `${advancedFps.toFixed(1)} fps under lockstep`);
   check('peers stay within a few frames of each other', Math.abs(h2 - g2) < 20, `host ${h2}, guest ${g2}`);
 
-  const hs = await host.eval('window.__dino.snapshot().netplay');
+  const hs = await host.eval('window.__retro.snapshot().netplay');
   check('stalls are rare', hs.stalls / (h2 || 1) < 0.25, `${hs.stalls} stalls over ${h2} frames`);
   console.log('\nhost netplay stats:', JSON.stringify(hs, null, 1));
 
@@ -120,14 +120,14 @@ try {
   // This is the classic way a lockstep game dies: one peer goes, the rest wait
   // forever for input that is never coming. Killing the tab outright rather
   // than clicking "leave" is the harsher test — no goodbye is sent.
-  const beforeDrop = await host.eval('window.__dino.snapshot().emulator.frame');
+  const beforeDrop = await host.eval('window.__retro.snapshot().emulator.frame');
   const droppedAt = Date.now();
   await conn.send('Target.closeTarget', { targetId: guest.targetId });
 
   let recovered = null;
   for (let i = 0; i < 60; i += 1) {
     await sleep(250);
-    const snap = await host.eval('window.__dino.snapshot()');
+    const snap = await host.eval('window.__retro.snapshot()');
     if (snap.netplay && snap.netplay.phase === 'solo' && snap.emulator.frame > beforeDrop + 30) {
       recovered = { ms: Date.now() - droppedAt, frame: snap.emulator.frame, players: snap.players.length };
       break;
@@ -140,9 +140,9 @@ try {
     check('roster drops the departed player', recovered.players === 1, `${recovered.players} player(s) left`);
   }
 
-  const f1 = await host.eval('window.__dino.snapshot().emulator.frame');
+  const f1 = await host.eval('window.__retro.snapshot().emulator.frame');
   await sleep(2000);
-  const f2 = await host.eval('window.__dino.snapshot().emulator.frame');
+  const f2 = await host.eval('window.__retro.snapshot().emulator.frame');
   check('host runs at full speed again after the drop', ((f2 - f1) * 1000) / 2000 > 55,
     `${(((f2 - f1) * 1000) / 2000).toFixed(1)} fps`);
 

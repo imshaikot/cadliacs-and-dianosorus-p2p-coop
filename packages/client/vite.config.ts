@@ -50,8 +50,8 @@ export default defineConfig(({ mode, command }) => {
     define: { __DEV_ROM_URL__: JSON.stringify(devRomUrl) },
     // The shared package is consumed as TypeScript source, not as a build
     // artifact: one less build step, and edits hot-reload.
-    resolve: { alias: { '@dino/shared': sharedEntry } },
-    optimizeDeps: { exclude: ['@dino/shared'] },
+    resolve: { alias: { '@retro/shared': sharedEntry } },
+    optimizeDeps: { exclude: ['@retro/shared'] },
     server: {
       port: 5173,
       // Fail loudly rather than silently shifting port, so the URL you hand a

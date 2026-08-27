@@ -22,7 +22,7 @@ function check(name, ok, detail = '') {
 }
 
 const INSTALL_PROBE = `(() => {
-  const m = window.__dino.machine();
+  const m = window.__retro.machine();
   window.__syncProbe = [];
   m.frameAdvanced.on((frame) => {
     if (frame % 5 !== 0) return;
@@ -50,26 +50,26 @@ try {
   const host = await Tab.create(conn, APP, 'HOST');
   await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const boot = await host.waitFor(
-    'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
+    'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
     'host running',
   );
   const roomCode = boot.roomCode;
 
   const g1 = await joinRoom(conn, 'GUEST1', roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
-  await g1.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest1 in lockstep');
+  await g1.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest1 in lockstep');
 
   const g2 = await joinRoom(conn, 'GUEST2', roomCode, { name: 'Mustapha Cairo', avatar: 'cadillac' });
-  await g2.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest2 in lockstep');
+  await g2.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest2 in lockstep');
 
   const tabs = { host, g1, g2 };
   for (const [n, t] of Object.entries(tabs)) {
-    await t.waitFor('window.__dino.snapshot().netplay?.ports?.length === 3', 60000, `${n} sees 3 ports`);
+    await t.waitFor('window.__retro.snapshot().netplay?.ports?.length === 3', 60000, `${n} sees 3 ports`);
   }
   const nets = {
-    host: await host.eval('window.__dino.snapshot().netplay'),
-    g1: await g1.eval('window.__dino.snapshot().netplay'),
-    g2: await g2.eval('window.__dino.snapshot().netplay'),
+    host: await host.eval('window.__retro.snapshot().netplay'),
+    g1: await g1.eval('window.__retro.snapshot().netplay'),
+    g2: await g2.eval('window.__retro.snapshot().netplay'),
   };
   check('all three peers reach lockstep with three ports',
     Object.values(nets).every((n) => JSON.stringify(n.ports) === '[0,1,2]'),
@@ -80,9 +80,9 @@ try {
 
   // --- the mesh: guests must be wired to each other, not just to the host ---
   const peerCounts = {
-    host: await host.eval('window.__dino.session().transport.getPeers().length'),
-    g1: await g1.eval('window.__dino.session().transport.getPeers().length'),
-    g2: await g2.eval('window.__dino.session().transport.getPeers().length'),
+    host: await host.eval('window.__retro.session().transport.getPeers().length'),
+    g1: await g1.eval('window.__retro.session().transport.getPeers().length'),
+    g2: await g2.eval('window.__retro.session().transport.getPeers().length'),
   };
   check('full mesh, not a star: every peer holds 2 connections',
     Object.values(peerCounts).every((c) => c === 2),
@@ -116,9 +116,9 @@ try {
   await sleep(2000);
 
   const latches = {
-    host: await host.eval('window.__dino.machine().latches.map(l => l.held)'),
-    g1: await g1.eval('window.__dino.machine().latches.map(l => l.held)'),
-    g2: await g2.eval('window.__dino.machine().latches.map(l => l.held)'),
+    host: await host.eval('window.__retro.machine().latches.map(l => l.held)'),
+    g1: await g1.eval('window.__retro.machine().latches.map(l => l.held)'),
+    g2: await g2.eval('window.__retro.machine().latches.map(l => l.held)'),
   };
   check('each peer only ever writes its own port',
     latches.host.filter((v) => v !== 0).length <= 1 &&
@@ -143,9 +143,9 @@ try {
 
   // --- desync detection is live and reporting zero -------------------------
   const post = {
-    host: await host.eval('window.__dino.snapshot().netplay'),
-    g1: await g1.eval('window.__dino.snapshot().netplay'),
-    g2: await g2.eval('window.__dino.snapshot().netplay'),
+    host: await host.eval('window.__retro.snapshot().netplay'),
+    g1: await g1.eval('window.__retro.snapshot().netplay'),
+    g2: await g2.eval('window.__retro.snapshot().netplay'),
   };
   check('the desync detector saw no desyncs',
     Object.values(post).every((n) => n.desyncs === 0),
@@ -181,14 +181,14 @@ try {
   let after = null;
   for (let i = 0; i < 60; i += 1) {
     await sleep(250);
-    const n = await host.eval('window.__dino.snapshot().netplay');
+    const n = await host.eval('window.__retro.snapshot().netplay');
     if (n && n.ports.length === 2) { after = n; break; }
   }
   check('the room drops to two players when one leaves', after !== null,
     after ? `ports ${JSON.stringify(after.ports)}` : 'never dropped');
-  const f1 = await host.eval('window.__dino.snapshot().emulator.frame');
+  const f1 = await host.eval('window.__retro.snapshot().emulator.frame');
   await sleep(2000);
-  const f2 = await host.eval('window.__dino.snapshot().emulator.frame');
+  const f2 = await host.eval('window.__retro.snapshot().emulator.frame');
   check('the remaining two keep playing at full speed', ((f2 - f1) * 1000) / 2000 > 55,
     `${(((f2 - f1) * 1000) / 2000).toFixed(1)} fps`);
 
@@ -197,15 +197,15 @@ try {
   let survivor = null;
   for (let i = 0; i < 80; i += 1) {
     await sleep(250);
-    const snap = await g2.eval('window.__dino.snapshot()');
+    const snap = await g2.eval('window.__retro.snapshot()');
     if (snap.netplay && snap.netplay.phase === 'solo') { survivor = snap; break; }
   }
   check('a surviving peer keeps running when the HOST vanishes', survivor !== null,
     survivor ? `fell back to solo at frame ${survivor.emulator.frame}` : 'froze');
   if (survivor) {
-    const s1 = await g2.eval('window.__dino.snapshot().emulator.frame');
+    const s1 = await g2.eval('window.__retro.snapshot().emulator.frame');
     await sleep(2000);
-    const s2 = await g2.eval('window.__dino.snapshot().emulator.frame');
+    const s2 = await g2.eval('window.__retro.snapshot().emulator.frame');
     check('and it is still advancing afterwards', ((s2 - s1) * 1000) / 2000 > 55,
       `${(((s2 - s1) * 1000) / 2000).toFixed(1)} fps`);
   }

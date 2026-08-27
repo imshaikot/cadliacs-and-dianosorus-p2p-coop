@@ -13,7 +13,7 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 export const ROOM_CODE_LENGTH = 12;
 
 /** Peer IDs must start and end alphanumeric; dashes are legal in the middle. */
-const PEER_ID_PREFIX = 'dino-v1-';
+const PEER_ID_PREFIX = 'retro-v1-';
 
 export function generateRoomCode(): string {
   const bytes = new Uint8Array(ROOM_CODE_LENGTH);

@@ -1,5 +1,5 @@
-import { generateRoomCode, normalizeRoomCode } from '@dino/shared';
-import type { ChannelDiagnostics, PeerStats, PeerId } from '@dino/shared';
+import { generateRoomCode, normalizeRoomCode } from '@retro/shared';
+import type { ChannelDiagnostics, PeerStats, PeerId } from '@retro/shared';
 
 import { loadConfig } from './config.js';
 import { ControlsPanel } from './controls-panel.js';
@@ -396,7 +396,7 @@ window.addEventListener('pagehide', () => session?.close('page closed'));
  */
 declare global {
   interface Window {
-    __dino: {
+    __retro: {
       config: typeof config;
       logs: Log['entries'];
       session: () => Session | null;
@@ -414,7 +414,7 @@ declare global {
   }
 }
 
-window.__dino = {
+window.__retro = {
   config,
   logs: log.entries,
   session: () => session,
@@ -465,5 +465,5 @@ if (import.meta.env.DEV) {
   // Bypasses the identity dialog on purpose: this exists to exercise the
   // broker's ID-collision path, and typing a name into a modal is not part of
   // what it is testing.
-  window.__dino.forceHost = (code) => begin('host', code, { name: 'squatter', avatar: 'skull' });
+  window.__retro.forceHost = (code) => begin('host', code, { name: 'squatter', avatar: 'skull' });
 }

@@ -14,7 +14,7 @@
  * remapping works before a ROM is even loaded. Both can run; neither is
  * damaged by the other.
  */
-import { Signal } from '@dino/shared';
+import { Signal } from '@retro/shared';
 
 import {
   MAX_DEADZONE,

@@ -34,7 +34,7 @@ try {
   // --- host claims a room code ---------------------------------------------
   await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const hostSnap = await host.waitFor(
-    'window.__dino.snapshot().status === "ready" && window.__dino.snapshot()',
+    'window.__retro.snapshot().status === "ready" && window.__retro.snapshot()',
     25000,
     'host ready',
   );
@@ -61,7 +61,7 @@ try {
   // --- guest joins the real room -------------------------------------------
   await joinGame(guest, roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
   const guestSnap = await guest.waitFor(
-    'window.__dino.snapshot().selfSlot !== null && window.__dino.snapshot()',
+    'window.__retro.snapshot().selfSlot !== null && window.__retro.snapshot()',
     25000,
     'guest welcomed',
   );
@@ -69,7 +69,7 @@ try {
   check('host assigned the guest player 2', guestSnap.selfSlot === 2);
 
   const hostAfterJoin = await host.waitFor(
-    'window.__dino.snapshot().players.length === 2 && window.__dino.snapshot()',
+    'window.__retro.snapshot().players.length === 2 && window.__retro.snapshot()',
     15000,
     'host sees 2 players',
   );
@@ -103,7 +103,7 @@ try {
   check('and the reply comes back the other way', gotOnHost === true, `"${reply}"`);
 
   // --- gotcha #1: what did the channels actually negotiate? ----------------
-  const channels = await host.eval('window.__dino.channels()');
+  const channels = await host.eval('window.__retro.channels()');
   const control = channels.find((c) => c.kind === 'control');
   const input = channels.find((c) => c.kind === 'input');
   console.log('\n--- negotiated data channels (host side) ---');
@@ -122,29 +122,29 @@ try {
   // the live netplay traffic now sharing this channel ignores it — and the
   // probe ignores netplay's packets in turn.
   const PROBE = [0x7f, 2, 3, 250, 255];
-  await guest.eval(`window.__dinoInputProbe = [];
-    window.__dino.session().transport.onInput((from, bytes) => {
-      if (bytes[0] === 0x7f) window.__dinoInputProbe.push([...bytes]);
+  await guest.eval(`window.__retroInputProbe = [];
+    window.__retro.session().transport.onInput((from, bytes) => {
+      if (bytes[0] === 0x7f) window.__retroInputProbe.push([...bytes]);
     });
     true`);
-  await host.eval(`window.__dino.session().transport.sendInput(new Uint8Array(${JSON.stringify(PROBE)})); true`);
-  const roundTripped = await guest.waitFor('window.__dinoInputProbe.length > 0 && window.__dinoInputProbe[0]', 10000, 'probe packet');
+  await host.eval(`window.__retro.session().transport.sendInput(new Uint8Array(${JSON.stringify(PROBE)})); true`);
+  const roundTripped = await guest.waitFor('window.__retroInputProbe.length > 0 && window.__retroInputProbe[0]', 10000, 'probe packet');
   check(
     "GOTCHA #2: serialization 'raw' round-trips a Uint8Array byte-for-byte",
     JSON.stringify(roundTripped) === JSON.stringify(PROBE),
     JSON.stringify(roundTripped),
   );
   const wireBytes = await host.eval(`(async () => {
-    const pc = window.__dino.session().transport.describeChannels();
+    const pc = window.__retro.session().transport.describeChannels();
     return pc.length;
   })()`);
   check('describeChannels reports both channels per peer', wireBytes === 2, `${wireBytes} rows`);
 
   // --- gotcha #3: a squatted room code is regenerated, not fatal -----------
   const squatter = await Tab.create(conn, APP, 'SQUATTER');
-  await squatter.eval(`window.__dino.forceHost(${JSON.stringify(roomCode)})`, { awaitPromise: false });
+  await squatter.eval(`window.__retro.forceHost(${JSON.stringify(roomCode)})`, { awaitPromise: false });
   const squatSnap = await squatter.waitFor(
-    'window.__dino.snapshot().status === "ready" && window.__dino.snapshot()',
+    'window.__retro.snapshot().status === "ready" && window.__retro.snapshot()',
     30000,
     'squatter recovered',
   );
@@ -157,7 +157,7 @@ try {
   check('and it says so in the log', rolledWarning);
 
   // --- RTT plumbing (M4 uses this, prove it reads today) -------------------
-  const stats = await host.eval('window.__dino.stats()');
+  const stats = await host.eval('window.__retro.stats()');
   const firstStat = Object.values(stats)[0];
   console.log('\n--- getStats() on the host->guest control connection ---');
   console.log(JSON.stringify(stats, null, 2));
@@ -173,7 +173,7 @@ try {
   // --- clean teardown ------------------------------------------------------
   await guest.clickSelector('#btn-leave');
   const hostAfterLeave = await host.waitFor(
-    'window.__dino.snapshot().players.length === 1 && window.__dino.snapshot()',
+    'window.__retro.snapshot().players.length === 1 && window.__retro.snapshot()',
     15000,
     'host sees the guest leave',
   );

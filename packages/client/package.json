@@ -1,5 +1,5 @@
 {
-  "name": "@dino/client",
+  "name": "@retro/client",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,6 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@dino/shared": "*"
+    "@retro/shared": "*"
   }
 }

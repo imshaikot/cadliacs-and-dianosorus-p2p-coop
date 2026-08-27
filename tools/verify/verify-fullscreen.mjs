@@ -73,7 +73,7 @@ let failure = null;
 try {
   const host = await Tab.create(conn, APP, 'HOST');
   await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
-  await host.waitFor('window.__dino.snapshot().emulator?.running', 120000, 'emulator running');
+  await host.waitFor('window.__retro.snapshot().emulator?.running', 120000, 'emulator running');
   await sleep(800);
 
   const windowed = await host.eval(GEOM);
@@ -83,12 +83,12 @@ try {
 
   // --- in, by a real click on the button -----------------------------------
   await host.clickSelector('#btn-fullscreen');
-  await host.waitFor('window.__dino.snapshot().fullscreen === true', 5000, 'fullscreen');
+  await host.waitFor('window.__retro.snapshot().fullscreen === true', 5000, 'fullscreen');
   await sleep(400);
   const full = await host.eval(GEOM);
   check('a real click enters fullscreen', full.fullscreen === true);
-  check('__dino.snapshot() reports it, so other checks can wait on it',
-    (await host.eval('window.__dino.snapshot().fullscreen')) === true);
+  check('__retro.snapshot() reports it, so other checks can wait on it',
+    (await host.eval('window.__retro.snapshot().fullscreen')) === true);
   check('the control relabels and reports its state',
     full.btnLabel === 'exit' && full.btnPressed === 'true', `"${full.btnLabel}"`);
   check('the wrapper fills the viewport',
@@ -139,9 +139,9 @@ try {
   check('a mouse move brings it all back', woken.idle === null && woken.hudOpacity === 1);
 
   // --- the keyboard toggle, and what it must not do ------------------------
-  const beforeToggle = await host.eval('window.__dino.machine().frame');
+  const beforeToggle = await host.eval('window.__retro.machine().frame');
   await host.holdKey(FKEY, 60);
-  await host.waitFor('window.__dino.snapshot().fullscreen === false', 5000, 'exited by F');
+  await host.waitFor('window.__retro.snapshot().fullscreen === false', 5000, 'exited by F');
   await sleep(400);
   const out = await host.eval(GEOM);
   check('F exits', out.fullscreen === false);
@@ -151,37 +151,37 @@ try {
     Math.abs(out.canvas.h - windowed.canvas.h) < 2, `${windowed.canvas.h} -> ${out.canvas.h}`);
 
   await host.holdKey(FKEY, 60);
-  await host.waitFor('window.__dino.snapshot().fullscreen === true', 5000, 'F re-enters');
+  await host.waitFor('window.__retro.snapshot().fullscreen === true', 5000, 'F re-enters');
   check('F enters again', true);
 
   // The keymap claims plain letters, and so does this. The chat box must win.
   await host.eval('document.exitFullscreen()');
-  await host.waitFor('window.__dino.snapshot().fullscreen === false', 5000, 'back on the page');
+  await host.waitFor('window.__retro.snapshot().fullscreen === false', 5000, 'back on the page');
   await host.typeInto('#chat-input', 'af');
   await sleep(250);
   const typed = await host.eval('document.getElementById("chat-input").value');
-  const toggled = await host.eval('window.__dino.snapshot().fullscreen');
+  const toggled = await host.eval('window.__retro.snapshot().fullscreen');
   await host.eval('document.getElementById("chat-input").value = ""; document.getElementById("chat-input").blur()');
   check('F typed into the chat box types an f instead of toggling',
     typed === 'af' && toggled === false, `chat reads "${typed}", fullscreen=${toggled}`);
 
   // --- the clock survives both transitions ---------------------------------
   await host.clickSelector('#btn-fullscreen');
-  await host.waitFor('window.__dino.snapshot().fullscreen === true', 5000, 'fullscreen again');
+  await host.waitFor('window.__retro.snapshot().fullscreen === true', 5000, 'fullscreen again');
   await sleep(1200);
-  const inside = await host.eval('window.__dino.machine().frame');
+  const inside = await host.eval('window.__retro.machine().frame');
   await host.holdKey(FKEY, 60);
-  await host.waitFor('window.__dino.snapshot().fullscreen === false', 5000, 'out again');
+  await host.waitFor('window.__retro.snapshot().fullscreen === false', 5000, 'out again');
   await sleep(1000);
-  const after = await host.eval('window.__dino.machine().frame');
+  const after = await host.eval('window.__retro.machine().frame');
   check('the emulator never stops across enter and exit',
     inside > beforeToggle && after > inside, `${beforeToggle} -> ${inside} -> ${after}`);
 
   // --- the game is still playable in there ---------------------------------
   await host.clickSelector('#btn-fullscreen');
-  await host.waitFor('window.__dino.snapshot().fullscreen === true', 5000, 'fullscreen once more');
+  await host.waitFor('window.__retro.snapshot().fullscreen === true', 5000, 'fullscreen once more');
   await host.keyEvent('rawKeyDown', KEYS.RIGHT);
-  const held = await host.eval('window.__dino.machine().latches[0].held');
+  const held = await host.eval('window.__retro.machine().latches[0].held');
   await host.keyEvent('keyUp', KEYS.RIGHT);
   check('game keys still reach the input latch in fullscreen',
     (held & bit('RIGHT')) !== 0, `held=0b${held.toString(2)}`);

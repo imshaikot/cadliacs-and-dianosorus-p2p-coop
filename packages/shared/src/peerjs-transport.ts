@@ -9,8 +9,8 @@
  *
  * Two data channels per peer, both opened by the guest:
  *
- *   dino-ctl   reliable: true,  serialization 'json'  -> ordered, retransmitted
- *   dino-in    reliable: false, serialization 'raw'   -> UNORDERED, still retransmitted
+ *   retro-ctl   reliable: true,  serialization 'json'  -> ordered, retransmitted
+ *   retro-in    reliable: false, serialization 'raw'   -> UNORDERED, still retransmitted
  *
  * On that second one: PeerJS builds the channel as
  *   `peerConnection.createDataChannel(label, { ordered: !!options.reliable })`
@@ -52,8 +52,8 @@ import type {
   VoiceDiagnostics,
 } from './transport.js';
 
-const CONTROL_LABEL = 'dino-ctl';
-const INPUT_LABEL = 'dino-in';
+const CONTROL_LABEL = 'retro-ctl';
+const INPUT_LABEL = 'retro-in';
 
 /** PeerJS 1.5 serializer keys. Note: the "no envelope" key is 'raw', NOT 'none'. */
 const CONTROL_SERIALIZATION = 'json';

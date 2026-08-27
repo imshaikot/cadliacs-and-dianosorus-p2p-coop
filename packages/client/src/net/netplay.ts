@@ -3,8 +3,8 @@ import {
   WireKind,
   chunkState,
   decodeStateChunk,
-} from '@dino/shared';
-import type { ControlMessage, PeerId } from '@dino/shared';
+} from '@retro/shared';
+import type { ControlMessage, PeerId } from '@retro/shared';
 
 import type { Machine } from '../emulator/machine.js';
 import type { Log } from '../log.js';

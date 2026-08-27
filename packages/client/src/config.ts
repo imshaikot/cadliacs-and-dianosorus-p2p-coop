@@ -1,4 +1,4 @@
-import type { BrokerConfig } from '@dino/shared';
+import type { BrokerConfig } from '@retro/shared';
 
 /**
  * Every knob that decides *where* signalling happens lives here and comes from

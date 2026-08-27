@@ -8,7 +8,7 @@ import {
   coerceAvatar,
   coerceName,
   formatRoomCode,
-} from '@dino/shared';
+} from '@retro/shared';
 import type {
   AvatarId,
   BrokerConfig,
@@ -23,7 +23,7 @@ import type {
   TransportStatus,
   Unsubscribe,
   VoiceDiagnostics,
-} from '@dino/shared';
+} from '@retro/shared';
 
 import type { Log } from './log.js';
 

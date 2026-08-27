@@ -5,8 +5,8 @@ import {
   coerceAvatar,
   coerceName,
   formatRoomCode,
-} from '@dino/shared';
-import type { AvatarId, ChannelDiagnostics, PeerId, TransportStatus } from '@dino/shared';
+} from '@retro/shared';
+import type { AvatarId, ChannelDiagnostics, PeerId, TransportStatus } from '@retro/shared';
 
 import { avatarDefs, avatarName, avatarSvg } from './avatars.js';
 import { isTyping } from './emulator/input.js';

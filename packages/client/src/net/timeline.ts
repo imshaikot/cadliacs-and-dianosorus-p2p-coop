@@ -1,4 +1,4 @@
-import { MAX_PLAYERS } from '@dino/shared';
+import { MAX_PLAYERS } from '@retro/shared';
 
 /**
  * Every peer's input, indexed by frame.

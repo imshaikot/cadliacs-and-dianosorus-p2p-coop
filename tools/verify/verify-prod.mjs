@@ -58,7 +58,7 @@ async function bringUp(tab) {
 
   await tab.setFileInput('#rom-file', ROM);
   return tab.waitFor(
-    'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
+    'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
     'emulator running from the picked file',
   );
@@ -72,25 +72,25 @@ try {
   check('picked ROM boots the emulator', boot.emulator.running === true, `frame ${boot.emulator.frame}`);
   check('still the right refresh rate in a built bundle', Math.abs(boot.emulator.targetFps - 59.63) < 0.01);
 
-  const t1 = await host.eval('window.__dino.snapshot().emulator.frames');
+  const t1 = await host.eval('window.__retro.snapshot().emulator.frames');
   await sleep(4000);
-  const t2 = await host.eval('window.__dino.snapshot().emulator.frames');
+  const t2 = await host.eval('window.__retro.snapshot().emulator.frames');
   check('runs at full speed in production', ((t2 - t1) * 1000) / 4000 > 58,
     `${(((t2 - t1) * 1000) / 4000).toFixed(1)} fps`);
 
   // The debug hook is DEV-only; its absence proves the build really is a build.
-  const hasDevHook = await host.eval('typeof window.__dino.forceHost === "function"');
+  const hasDevHook = await host.eval('typeof window.__retro.forceHost === "function"');
   check('dev-only hooks are stripped from the bundle', hasDevHook === false);
 
   const guest = await Tab.create(conn, APP, 'GUEST');
   await joinGame(guest, boot.roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
   await bringUp(guest);
-  await guest.waitFor('window.__dino.snapshot().netplay?.running === true', 90000, 'guest in lockstep');
-  await host.waitFor('window.__dino.snapshot().netplay?.running === true', 60000, 'host in lockstep');
+  await guest.waitFor('window.__retro.snapshot().netplay?.running === true', 90000, 'guest in lockstep');
+  await host.waitFor('window.__retro.snapshot().netplay?.running === true', 60000, 'host in lockstep');
   check('two production peers reach lockstep', true);
 
   const probe = `(() => {
-    const m = window.__dino.machine();
+    const m = window.__retro.machine();
     window.__p = [];
     m.frameAdvanced.on((f) => {
       if (f % 10) return;

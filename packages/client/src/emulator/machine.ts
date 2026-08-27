@@ -1,4 +1,4 @@
-import { Signal } from '@dino/shared';
+import { Signal } from '@retro/shared';
 
 import { EmulatorAudio } from './audio.js';
 import type { AudioStats } from './audio.js';

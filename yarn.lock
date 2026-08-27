@@ -5,22 +5,6 @@ __metadata:
   version: 10
   cacheKey: 10c0
 
-"@dino/client@workspace:packages/client":
-  version: 0.0.0-use.local
-  resolution: "@dino/client@workspace:packages/client"
-  dependencies:
-    "@dino/shared": "npm:*"
-  languageName: unknown
-  linkType: soft
-
-"@dino/shared@npm:*, @dino/shared@workspace:packages/shared":
-  version: 0.0.0-use.local
-  resolution: "@dino/shared@workspace:packages/shared"
-  dependencies:
-    peerjs: "npm:^1.5.5"
-  languageName: unknown
-  linkType: soft
-
 "@isaacs/fs-minipass@npm:^4.0.0":
   version: 4.0.1
   resolution: "@isaacs/fs-minipass@npm:4.0.1"
@@ -43,6 +27,22 @@ __metadata:
   checksum: 10c0/adec7c1d4c0a031a83afe976884695ff1467987da3f9e775d24bd596ca82346d3734cc9898f5645955050246a13621b4442696753a2d83d2954127fbdfbd5a5f
   languageName: node
   linkType: hard
+
+"@retro/client@workspace:packages/client":
+  version: 0.0.0-use.local
+  resolution: "@retro/client@workspace:packages/client"
+  dependencies:
+    "@retro/shared": "npm:*"
+  languageName: unknown
+  linkType: soft
+
+"@retro/shared@npm:*, @retro/shared@workspace:packages/shared":
+  version: 0.0.0-use.local
+  resolution: "@retro/shared@workspace:packages/shared"
+  dependencies:
+    peerjs: "npm:^1.5.5"
+  languageName: unknown
+  linkType: soft
 
 "@rolldown/binding-android-arm-eabi@npm:1.2.6":
   version: 1.2.6
@@ -302,15 +302,6 @@ __metadata:
   checksum: 10c0/8e88f5c798ea4562d28c5a3e9ad69e3879890bc5d695d8f2dffb8609be4c890aacc8f80ef4553fdd2c6a62d70c2ce8bc57b38074e383beb7487bdafa9ed42ea5
   languageName: node
   linkType: hard
-
-"cadillacs-online@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "cadillacs-online@workspace:."
-  dependencies:
-    typescript: "npm:^7.0.2"
-    vite: "npm:^8.2.2"
-  languageName: unknown
-  linkType: soft
 
 "chownr@npm:^3.0.0":
   version: 3.0.0
@@ -618,6 +609,15 @@ __metadata:
   checksum: 10c0/b89c2d862604f35fec795477b0c7e376feab3ba0d4f4d291c4e959567442697cf451ac557d0623c1cc38af45a78128b983410f397a10c5d3a67f76c33de4754b
   languageName: node
   linkType: hard
+
+"retro-games-p2p-multiplayer-coop@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "retro-games-p2p-multiplayer-coop@workspace:."
+  dependencies:
+    typescript: "npm:^7.0.2"
+    vite: "npm:^8.2.2"
+  languageName: unknown
+  linkType: soft
 
 "rolldown@npm:~1.2.4":
   version: 1.2.6

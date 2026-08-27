@@ -1,4 +1,4 @@
-import type { PeerId, Transport } from '@dino/shared';
+import type { PeerId, Transport } from '@retro/shared';
 
 import type { Log } from './log.js';
 

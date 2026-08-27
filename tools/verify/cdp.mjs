@@ -327,7 +327,7 @@ export async function warmUp(conn, url) {
   const tab = await Tab.create(conn, url, 'WARMUP');
   const t0 = Date.now();
   try {
-    await tab.waitFor('typeof window.__dino === "object"', 180000, 'app module graph');
+    await tab.waitFor('typeof window.__retro === "object"', 180000, 'app module graph');
   } finally {
     await conn.send('Target.closeTarget', { targetId: tab.targetId }).catch(() => {});
   }

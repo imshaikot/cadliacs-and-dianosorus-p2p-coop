@@ -1,9 +1,9 @@
 {
-  "name": "cadillacs-online",
+  "name": "retro-games-p2p-multiplayer-coop",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Browser-based 3-player online co-op for Cadillacs and Dinosaurs (CPS-1.5) over WebRTC",
+  "description": "Browser-based peer-to-peer co-op for CPS-1/CPS-2 arcade games over WebRTC",
   "workspaces": [
     "packages/shared",
     "packages/client"

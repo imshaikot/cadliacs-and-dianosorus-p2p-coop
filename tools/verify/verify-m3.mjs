@@ -23,7 +23,7 @@ function check(name, ok, detail = '') {
 }
 
 const INSTALL_PROBE = `(() => {
-  const m = window.__dino.machine();
+  const m = window.__retro.machine();
   window.__syncProbe = [];
   m.frameAdvanced.on((frame) => {
     if (frame % 5 !== 0) return;
@@ -86,15 +86,15 @@ try {
   const host = await Tab.create(conn, APP, 'HOST');
   await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const boot = await host.waitFor(
-    'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
+    'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
     'host running',
   );
 
   const guest = await Tab.create(conn, APP, 'GUEST');
   await joinGame(guest, boot.roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
-  await guest.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest in lockstep');
-  await host.waitFor('window.__dino.snapshot().netplay?.running === true', 60000, 'host in lockstep');
+  await guest.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest in lockstep');
+  await host.waitFor('window.__retro.snapshot().netplay?.running === true', 60000, 'host in lockstep');
   check('both peers in lockstep', true);
 
   await host.eval(INSTALL_PROBE);
@@ -103,11 +103,11 @@ try {
 
   // --- the guest's own keyboard must reach its own port -------------------
   await guest.keyEvent('rawKeyDown', KEYS.COIN);
-  const guestHeld = await guest.eval('window.__dino.machine().latches[1].held');
+  const guestHeld = await guest.eval('window.__retro.machine().latches[1].held');
   await guest.keyEvent('keyUp', KEYS.COIN);
   check('guest keyboard drives port 1, not port 0', (guestHeld & bit('COIN')) !== 0,
     `latch[1].held=0b${guestHeld.toString(2)}`);
-  const guestPort0 = await guest.eval('window.__dino.machine().latches[0].held');
+  const guestPort0 = await guest.eval('window.__retro.machine().latches[0].held');
   check('guest does NOT touch player 1', guestPort0 === 0);
 
   // --- guest coins in; the host must see it -------------------------------
@@ -123,12 +123,12 @@ try {
   const afterHost = await host.eval(SCREEN);
   check('the GUEST pressing coin+start changed the HOST screen', afterHost !== beforeHost,
     `${beforeHost} -> ${afterHost}`);
-  const markA = await host.eval('window.__dino.machine().frame');
+  const markA = await host.eval('window.__retro.machine().frame');
   const agreeA = await agreeAt(host, guest, markA);
   check('and both machines computed that frame identically', agreeA.agree,
     `frame ${agreeA.frame}: ${agreeA.hostHash} vs ${agreeA.guestHash}`);
 
-  const hostPackets = await host.eval('window.__dino.snapshot().netplay.packetsIn');
+  const hostPackets = await host.eval('window.__retro.snapshot().netplay.packetsIn');
   check('host is receiving the guest input stream', hostPackets > 100, `${hostPackets} packets in`);
 
   // --- both players acting at once, which is the real test ----------------
@@ -150,7 +150,7 @@ try {
   await sleep(1500);
 
   const bothHost = await host.eval(SCREEN);
-  const markB = await host.eval('window.__dino.machine().frame');
+  const markB = await host.eval('window.__retro.machine().frame');
   const agreeB = await agreeAt(host, guest, markB);
   check('simultaneous input from both players stays in sync', agreeB.agree,
     `frame ${agreeB.frame}: ${agreeB.hostHash} vs ${agreeB.guestHash}`);
@@ -168,7 +168,7 @@ try {
     bad.length ? `${bad.length}/${common} differed, first at frame ${bad[0][0]}` : `${common} frames, identical`,
   );
 
-  const net = await host.eval('window.__dino.snapshot().netplay');
+  const net = await host.eval('window.__retro.snapshot().netplay');
   check('stalls stayed rare while playing', net.stalls < 60, `${net.stalls} stalls over ${net.frame} frames`);
   console.log('\nhost netplay:', JSON.stringify(net, null, 1));
 

@@ -53,7 +53,7 @@ const INBOUND = `(() => {
 
 /** Our own outbound track, which is what a mute toggle actually flips. */
 const OUTBOUND = `(() => {
-  const v = window.__dino.snapshot().voice;
+  const v = window.__retro.snapshot().voice;
   return { ...v };
 })()`;
 
@@ -69,7 +69,7 @@ async function heardSpeaking(tab, ms = 8000) {
   const seen = new Set();
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
-    for (const id of await tab.eval('window.__dino.snapshot().voice.speaking')) seen.add(id);
+    for (const id of await tab.eval('window.__retro.snapshot().voice.speaking')) seen.add(id);
     await sleep(120);
   }
   return seen;
@@ -104,7 +104,7 @@ try {
   const host = await Tab.create(conn, APP, 'HOST');
   await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const boot = await host.waitFor(
-    'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
+    'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
     'host running',
   );
@@ -114,21 +114,21 @@ try {
   // Deliberately over the 16-character limit: the clamp has to happen on the
   // way out AND be what the other peers see.
   await joinGame(g1, roomCode, { name: 'Hannah Dundee the Ambassador', avatar: 'trike' });
-  await g1.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest1 in lockstep');
+  await g1.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest1 in lockstep');
 
   const g2 = await Tab.create(conn, APP, 'GUEST2');
   await joinGame(g2, roomCode, { name: 'Mustapha Cairo', avatar: 'cadillac' });
-  await g2.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest2 in lockstep');
+  await g2.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest2 in lockstep');
 
   const tabs = { host, g1, g2 };
   for (const [n, t] of Object.entries(tabs)) {
-    await t.waitFor('window.__dino.snapshot().players.length === 3', 60000, `${n} sees 3 players`);
+    await t.waitFor('window.__retro.snapshot().players.length === 3', 60000, `${n} sees 3 players`);
   }
 
   const rosters = {
-    host: await host.eval('window.__dino.snapshot().players'),
-    g1: await g1.eval('window.__dino.snapshot().players'),
-    g2: await g2.eval('window.__dino.snapshot().players'),
+    host: await host.eval('window.__retro.snapshot().players'),
+    g1: await g1.eval('window.__retro.snapshot().players'),
+    g2: await g2.eval('window.__retro.snapshot().players'),
   };
   const describe = (players) => players.map((p) => `P${p.slot}:${p.label}/${p.avatar}`).join(' ');
 
@@ -195,15 +195,15 @@ try {
   // later unmute is a replaceTrack rather than a renegotiation PeerJS cannot do.
   for (const [n, t] of Object.entries(tabs)) {
     await t.waitFor(
-      'window.__dino.snapshot().voice.calls.filter((c) => c.hasSender).length === 2',
+      'window.__retro.snapshot().voice.calls.filter((c) => c.hasSender).length === 2',
       60000,
       `${n} has a send-capable call to both peers`,
     );
   }
   const ready = {
-    host: await host.eval('window.__dino.snapshot().voice.calls'),
-    g1: await g1.eval('window.__dino.snapshot().voice.calls'),
-    g2: await g2.eval('window.__dino.snapshot().voice.calls'),
+    host: await host.eval('window.__retro.snapshot().voice.calls'),
+    g1: await g1.eval('window.__retro.snapshot().voice.calls'),
+    g2: await g2.eval('window.__retro.snapshot().voice.calls'),
   };
   check('every pair negotiates a two-way call before anyone says anything',
     Object.values(ready).every((cs) => cs.length === 2 && cs.every((c) => c.hasSender)),
@@ -215,7 +215,7 @@ try {
     (await host.eval('document.getElementById("speaking").hidden')) === true);
 
   // --- unmuting is seen by everyone ----------------------------------------
-  const frameBefore = await host.eval('window.__dino.snapshot().emulator.frame');
+  const frameBefore = await host.eval('window.__retro.snapshot().emulator.frame');
   await toggleMic(g1);
   // Wait on the control the player actually sees, which only settles once the
   // microphone is genuinely open and the lobby has been redrawn from it.
@@ -231,7 +231,7 @@ try {
   const pressed = await g1.eval('document.getElementById("btn-mic").getAttribute("aria-pressed")');
   check('the orb on the portrait reflects it', pressed === 'true', String(pressed));
 
-  const P2SLOT = 'window.__dino.snapshot().players.find((p) => p.slot === 2)';
+  const P2SLOT = 'window.__retro.snapshot().players.find((p) => p.slot === 2)';
   for (const [n, t] of Object.entries({ host, g2 })) {
     await t.waitFor(`${P2SLOT}?.muted === false`, 15000, `${n} sees P2 unmute`);
   }
@@ -250,7 +250,7 @@ try {
     Object.values(sinks).every((peers) => peers.length === 2 && peers.every((p) => p.live)),
     Object.entries(sinks).map(([k, v]) => `${k}:${v.length}`).join(' '));
 
-  const g1Id = await g1.eval('window.__dino.snapshot().selfId');
+  const g1Id = await g1.eval('window.__retro.snapshot().selfId');
   const heardP2 = {
     host: await heardSpeaking(host),
     g2: await heardSpeaking(g2, 2000),
@@ -277,7 +277,7 @@ try {
   // audible at any given instant is not something to pin a check on. That the
   // indicator always shows exactly the people the detector heard, is.
   const SPEAKING_DOM = `(() => {
-    const snap = window.__dino.snapshot();
+    const snap = window.__retro.snapshot();
     const heard = new Set(snap.voice.speaking);
     const expected = snap.players
       .filter((p) => heard.has(p.isSelf ? 'self' : p.peerId))
@@ -328,9 +328,9 @@ try {
   // This is the assertion a one-way implementation cannot pass: every peer is
   // transmitting to both of the others, on a sender that was there all along.
   const sending = {
-    host: await host.eval('window.__dino.snapshot().voice.calls'),
-    g1: await g1.eval('window.__dino.snapshot().voice.calls'),
-    g2: await g2.eval('window.__dino.snapshot().voice.calls'),
+    host: await host.eval('window.__retro.snapshot().voice.calls'),
+    g1: await g1.eval('window.__retro.snapshot().voice.calls'),
+    g2: await g2.eval('window.__retro.snapshot().voice.calls'),
   };
   for (const [who, calls] of Object.entries(sending)) {
     check(
@@ -343,7 +343,7 @@ try {
 
   // --- muting closes the device but keeps the call -------------------------
   await toggleMic(g1);
-  const P2 = 'window.__dino.snapshot().players.find((p) => p.slot === 2)';
+  const P2 = 'window.__retro.snapshot().players.find((p) => p.slot === 2)';
   for (const [n, t] of Object.entries({ host, g2 })) {
     await t.waitFor(`${P2}?.muted === true`, 15000, `${n} sees P2 mute again`);
   }
@@ -357,7 +357,7 @@ try {
   // ...and the call it was riding survived, so the next unmute is instant.
   // replaceTrack settles asynchronously, so this waits rather than samples.
   const g1Calls = await g1.waitFor(
-    `(() => { const cs = window.__dino.snapshot().voice.calls;
+    `(() => { const cs = window.__retro.snapshot().voice.calls;
        return cs.length === 2 && cs.every((c) => c.senderTrack === null) && cs; })()`,
     15000,
     'g1 stops transmitting',
@@ -369,9 +369,9 @@ try {
   // --- and none of it touched the game -------------------------------------
   await sleep(2000);
   const post = {
-    host: await host.eval('window.__dino.snapshot().netplay'),
-    g1: await g1.eval('window.__dino.snapshot().netplay'),
-    g2: await g2.eval('window.__dino.snapshot().netplay'),
+    host: await host.eval('window.__retro.snapshot().netplay'),
+    g1: await g1.eval('window.__retro.snapshot().netplay'),
+    g2: await g2.eval('window.__retro.snapshot().netplay'),
   };
   check('lockstep never stopped for any of it',
     Object.values(post).every((n) => n.running === true),
@@ -379,7 +379,7 @@ try {
   check('no peer desynced while voice was connecting',
     Object.values(post).every((n) => n.desyncs === 0),
     Object.entries(post).map(([k, n]) => `${k}:${n.desyncs}`).join(' '));
-  const frameAfter = await host.eval('window.__dino.snapshot().emulator.frame');
+  const frameAfter = await host.eval('window.__retro.snapshot().emulator.frame');
   check('the game kept running at full speed through it', frameAfter - frameBefore > 100,
     `${frameAfter - frameBefore} frames`);
 

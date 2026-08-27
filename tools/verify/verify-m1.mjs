@@ -47,7 +47,7 @@ try {
   await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
 
   const boot = await host.waitFor(
-    'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
+    'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
     'emulator running',
   );
@@ -62,15 +62,15 @@ try {
 
   // --- runs at full speed --------------------------------------------------
   await sleep(1500); // let it settle past the boot spike
-  const t1 = await host.eval('({ f: window.__dino.snapshot().emulator.frames, t: performance.now() })');
+  const t1 = await host.eval('({ f: window.__retro.snapshot().emulator.frames, t: performance.now() })');
   await sleep(6000);
-  const t2 = await host.eval('({ f: window.__dino.snapshot().emulator.frames, t: performance.now() })');
+  const t2 = await host.eval('({ f: window.__retro.snapshot().emulator.frames, t: performance.now() })');
   const measuredFps = ((t2.f - t1.f) * 1000) / (t2.t - t1.t);
   const errPct = Math.abs(measuredFps - emu.targetFps) / emu.targetFps * 100;
   check('runs at full speed over a 6s window', errPct < 1.0,
     `${measuredFps.toFixed(3)} fps vs target ${emu.targetFps} (${errPct.toFixed(2)}% off)`);
 
-  const mid = await host.eval('window.__dino.snapshot().emulator');
+  const mid = await host.eval('window.__retro.snapshot().emulator');
   check('frame cost leaves plenty of headroom', mid.frameTimeMs < 4,
     `${mid.frameTimeMs.toFixed(2)} ms of a ${(1000 / emu.targetFps).toFixed(2)} ms budget`);
   check('no catch-up frames were dropped', mid.droppedCatchUp === 0, String(mid.droppedCatchUp));
@@ -94,7 +94,7 @@ try {
 
   // --- is the audio clock even real here? ----------------------------------
   const clock = await host.eval(`(async () => {
-    const ctx = window.__dino.machine().audio.context;
+    const ctx = window.__retro.machine().audio.context;
     const a = { audio: ctx.currentTime, wall: performance.now() };
     await new Promise((r) => setTimeout(r, 3000));
     const b = { audio: ctx.currentTime, wall: performance.now() };
@@ -111,9 +111,9 @@ try {
     audio.primed === true && Math.abs(audio.fill - 2400) < 700,
     `${audio.fill} samples (target 2400), primed=${audio.primed}`);
 
-  const w1 = await host.eval('window.__dino.snapshot().emulator.audio');
+  const w1 = await host.eval('window.__retro.snapshot().emulator.audio');
   await sleep(5000);
-  const w2 = await host.eval('window.__dino.snapshot().emulator.audio');
+  const w2 = await host.eval('window.__retro.snapshot().emulator.audio');
   const underrunsInWindow = w2.underruns - w1.underruns;
   const correctionsInWindow = w2.dropped - w1.dropped + (w2.repeated - w1.repeated);
   check('no underruns in steady state', underrunsInWindow === 0,
@@ -124,15 +124,15 @@ try {
 
   // --- real keys reach the input latch -------------------------------------
   await host.keyEvent('rawKeyDown', KEYS.COIN);
-  const heldDown = await host.eval('window.__dino.machine().latches[0].held');
+  const heldDown = await host.eval('window.__retro.machine().latches[0].held');
   await host.keyEvent('keyUp', KEYS.COIN);
   await sleep(50);
-  const heldUp = await host.eval('window.__dino.machine().latches[0].held');
+  const heldUp = await host.eval('window.__retro.machine().latches[0].held');
   check('a real keydown sets the COIN bit in the latch', (heldDown & bit('COIN')) !== 0, `held=0b${heldDown.toString(2)}`);
   check('and keyup clears it', (heldUp & bit('COIN')) === 0, `held=0b${heldUp.toString(2)}`);
 
   await host.keyEvent('rawKeyDown', KEYS.RIGHT);
-  const heldRight = await host.eval('window.__dino.machine().latches[0].held');
+  const heldRight = await host.eval('window.__retro.machine().latches[0].held');
   await host.keyEvent('keyUp', KEYS.RIGHT);
   check('and the joystick maps to RIGHT', (heldRight & bit('RIGHT')) !== 0, `held=0b${heldRight.toString(2)}`);
 
@@ -144,7 +144,7 @@ try {
 
   // --- deterministic: input changes the emulation --------------------------
   const divergence = await host.eval(`(() => {
-    const m = window.__dino.machine();
+    const m = window.__retro.machine();
     m.stop();                                   // take the clock away from rAF
     const B = { COIN: 1 << 2, START: 1 << 3, RIGHT: 1 << 7 };
     const fnv = (px) => { let h = 2166136261; for (let i = 0; i < px.length; i += 7) { h ^= px[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); };
@@ -180,7 +180,7 @@ try {
     `idle=${divergence.a1} attack=${divergence.withAttack}`);
 
   // --- live, through the real keyboard, and photograph it ------------------
-  await host.eval('window.__dino.machine().start()');
+  await host.eval('window.__retro.machine().start()');
   await sleep(300);
   const beforeCoin = await host.eval(SCREEN_PROBE);
   await host.holdKey(KEYS.COIN, 150);
@@ -196,7 +196,7 @@ try {
   await sleep(400);
   await host.screenshot(OUT + 'm1-after-right.png');
 
-  const final = await host.eval('window.__dino.snapshot().emulator');
+  const final = await host.eval('window.__retro.snapshot().emulator');
   check('still running at the end', final.running === true, `${final.frames} frames`);
   check('the HUD resolves 59.63 from 60.00', Math.abs(final.emulatedFps - emu.targetFps) < 0.25,
     `HUD reads ${final.emulatedFps.toFixed(2)} fps`);

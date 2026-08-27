@@ -1,5 +1,5 @@
-import { AVATAR_IDS, DEFAULT_AVATAR } from '@dino/shared';
-import type { AvatarId } from '@dino/shared';
+import { AVATAR_IDS, DEFAULT_AVATAR } from '@retro/shared';
+import type { AvatarId } from '@retro/shared';
 
 /**
  * The drawings behind the ten avatar ids.

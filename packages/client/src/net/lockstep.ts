@@ -6,8 +6,8 @@ import {
   decodeInput,
   encodeChecksum,
   encodeInput,
-} from '@dino/shared';
-import type { PeerId, Transport } from '@dino/shared';
+} from '@retro/shared';
+import type { PeerId, Transport } from '@retro/shared';
 
 import type { InputLatch } from '../emulator/input.js';
 import { InputTimeline } from './timeline.js';

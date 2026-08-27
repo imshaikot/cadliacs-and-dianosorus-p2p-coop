@@ -10,7 +10,7 @@ export interface LogEntry {
 /**
  * Everything interesting goes to two places: the on-page log so a human can see
  * it without opening devtools, and `console` so automated verification can read
- * it over the DevTools protocol. Kept in an array too, so `window.__dino.logs`
+ * it over the DevTools protocol. Kept in an array too, so `window.__retro.logs`
  * is a full transcript.
  */
 export class Log {
