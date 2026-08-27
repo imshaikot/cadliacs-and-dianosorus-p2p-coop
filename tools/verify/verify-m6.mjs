@@ -102,7 +102,7 @@ try {
 
   // --- three named players in one room --------------------------------------
   const host = await Tab.create(conn, APP, 'HOST');
-  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
+  await hostGame(host, { name: 'Ada', avatar: 'joystick' });
   const boot = await host.waitFor(
     'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
@@ -113,11 +113,11 @@ try {
   const g1 = await Tab.create(conn, APP, 'GUEST1');
   // Deliberately over the 16-character limit: the clamp has to happen on the
   // way out AND be what the other peers see.
-  await joinGame(g1, roomCode, { name: 'Hannah Dundee the Ambassador', avatar: 'trike' });
+  await joinGame(g1, roomCode, { name: 'Bo the Long Named', avatar: 'coin' });
   await g1.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest1 in lockstep');
 
   const g2 = await Tab.create(conn, APP, 'GUEST2');
-  await joinGame(g2, roomCode, { name: 'Mustapha Cairo', avatar: 'cadillac' });
+  await joinGame(g2, roomCode, { name: 'Cy', avatar: 'cabinet' });
   await g2.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest2 in lockstep');
 
   const tabs = { host, g1, g2 };
@@ -134,7 +134,7 @@ try {
 
   // The real test of the roster additions: a guest learns the *other* guest's
   // name and avatar only because the host passed them on.
-  const expected = 'P1:Jack Tenrec/raptor P2:Hannah Dundee th/trike P3:Mustapha Cairo/cadillac';
+  const expected = 'P1:Ada/joystick P2:Bo the Long Name/coin P3:Cy/cabinet';
   for (const [who, players] of Object.entries(rosters)) {
     check(`${who} sees all three names and avatars`, describe(players) === expected, describe(players));
   }
@@ -149,7 +149,7 @@ try {
 
   const rosterText = await host.eval('document.getElementById("roster").textContent');
   check('the names are on the page, not just in the model',
-    /Jack Tenrec/.test(rosterText) && /Mustapha Cairo/.test(rosterText), rosterText.replace(/\s+/g, ' ').slice(0, 140));
+    /\bAda\b/.test(rosterText) && /\bCy\b/.test(rosterText), rosterText.replace(/\s+/g, ' ').slice(0, 140));
   const rosterAvatars = await host.eval(
     '[...document.querySelectorAll("#roster use")].map((u) => u.getAttribute("href")).join(",")',
   );
@@ -237,7 +237,7 @@ try {
   }
   const live = { host: await host.eval(P2SLOT), g2: await g2.eval(P2SLOT) };
   check('the other two both see P2 go live',
-    Object.values(live).every((p) => p && p.muted === false && p.label === 'Hannah Dundee th'),
+    Object.values(live).every((p) => p && p.muted === false && p.label === 'Bo the Long Name'),
     Object.entries(live).map(([k, p]) => `${k}:${p?.label}=${p?.muted}`).join(' '));
 
   // --- one talker, heard by everyone ---------------------------------------

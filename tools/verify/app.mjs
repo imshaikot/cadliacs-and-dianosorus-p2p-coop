@@ -26,13 +26,13 @@ async function completeIdentity(tab, { name, avatar }) {
 }
 
 /** HOST A GAME, all the way through to a room. */
-export async function hostGame(tab, { name = 'Jack Tenrec', avatar = 'raptor' } = {}) {
+export async function hostGame(tab, { name = 'Ada', avatar = 'joystick' } = {}) {
   await tab.clickSelector('#btn-host');
   await completeIdentity(tab, { name, avatar });
 }
 
 /** Type a room code and JOIN, all the way through to a room. */
-export async function joinGame(tab, code, { name = 'Hannah Dundee', avatar = 'trike' } = {}) {
+export async function joinGame(tab, code, { name = 'Bo', avatar = 'coin' } = {}) {
   await tab.typeInto('#input-code', code);
   await tab.clickSelector('#btn-join');
   await completeIdentity(tab, { name, avatar });

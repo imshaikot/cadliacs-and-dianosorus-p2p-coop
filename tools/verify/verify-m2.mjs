@@ -42,7 +42,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
+  await hostGame(host, { name: 'Ada', avatar: 'joystick' });
   const hostBoot = await host.waitFor(
     'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
@@ -52,7 +52,7 @@ try {
   check('host boots its own emulator', hostBoot.emulator.running === true, `frame ${hostBoot.emulator.frame}`);
 
   const guest = await Tab.create(conn, APP, 'GUEST');
-  await joinGame(guest, roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
+  await joinGame(guest, roomCode, { name: 'Bo', avatar: 'coin' });
 
   const guestBoot = await guest.waitFor(
     'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',

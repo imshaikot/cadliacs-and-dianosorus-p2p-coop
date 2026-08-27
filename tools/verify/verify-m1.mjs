@@ -44,7 +44,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
+  await hostGame(host, { name: 'Ada', avatar: 'joystick' });
 
   const boot = await host.waitFor(
     'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',

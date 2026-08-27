@@ -10,21 +10,21 @@
  * the handshake to solve a problem nobody has.
  */
 export const AVATAR_IDS = [
-  'raptor',
-  'trike',
-  'sauropod',
-  'pterosaur',
-  'ankylosaur',
-  'cadillac',
-  'cutlass',
-  'cycad',
+  'joystick',
+  'coin',
+  'cabinet',
+  'alien',
+  'rocket',
+  'robot',
+  'star',
   'skull',
-  'volcano',
+  'bolt',
+  'heart',
 ] as const;
 
 export type AvatarId = (typeof AVATAR_IDS)[number];
 
-export const DEFAULT_AVATAR: AvatarId = 'raptor';
+export const DEFAULT_AVATAR: AvatarId = 'joystick';
 
 /** A peer controls this string, so every inbound avatar goes through here. */
 export function isAvatarId(value: unknown): value is AvatarId {

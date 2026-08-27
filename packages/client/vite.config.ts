@@ -37,13 +37,18 @@ export default defineConfig(({ mode, command }) => {
     : {};
 
   /**
-   * The dev server already serves repo-root files over `/@fs`, so the ROM the
-   * brief asks for at `roms/dino.zip` is reachable with no plugin and no copy.
-   * A production build gets an empty string and falls back to a file picker,
-   * because a ROM is the user's to supply and must never ship in the bundle.
+   * A development convenience only: the dev server already serves repo-root
+   * files over `/@fs`, so whatever you name in VITE_ROM_FILE is reachable from
+   * `roms/` with no plugin and no copy, and you skip the file picker on every
+   * reload.
+   *
+   * There is deliberately no default. This player is game-agnostic — the driver
+   * is chosen from the file's own name — so guessing a filename here would be
+   * both wrong and a statement about which game this project is for. Unset means
+   * the picker, which is exactly what a production build always gets.
    */
-  const romFile = env['VITE_ROM_FILE'] ?? 'dino.zip';
-  const devRomUrl = command === 'serve' ? `/@fs${repoRoot}roms/${romFile}` : '';
+  const romFile = env['VITE_ROM_FILE'] ?? '';
+  const devRomUrl = command === 'serve' && romFile ? `/@fs${repoRoot}roms/${romFile}` : '';
 
   return {
     envDir: repoRoot,

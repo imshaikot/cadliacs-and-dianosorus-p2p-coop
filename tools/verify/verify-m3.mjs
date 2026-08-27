@@ -84,7 +84,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
+  await hostGame(host, { name: 'Ada', avatar: 'joystick' });
   const boot = await host.waitFor(
     'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
@@ -92,7 +92,7 @@ try {
   );
 
   const guest = await Tab.create(conn, APP, 'GUEST');
-  await joinGame(guest, boot.roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
+  await joinGame(guest, boot.roomCode, { name: 'Bo', avatar: 'coin' });
   await guest.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest in lockstep');
   await host.waitFor('window.__retro.snapshot().netplay?.running === true', 60000, 'host in lockstep');
   check('both peers in lockstep', true);

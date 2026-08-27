@@ -48,7 +48,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
+  await hostGame(host, { name: 'Ada', avatar: 'joystick' });
   const boot = await host.waitFor(
     'window.__retro.snapshot().emulator?.running && window.__retro.snapshot()',
     120000,
@@ -56,10 +56,10 @@ try {
   );
   const roomCode = boot.roomCode;
 
-  const g1 = await joinRoom(conn, 'GUEST1', roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
+  const g1 = await joinRoom(conn, 'GUEST1', roomCode, { name: 'Bo', avatar: 'coin' });
   await g1.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest1 in lockstep');
 
-  const g2 = await joinRoom(conn, 'GUEST2', roomCode, { name: 'Mustapha Cairo', avatar: 'cadillac' });
+  const g2 = await joinRoom(conn, 'GUEST2', roomCode, { name: 'Cy', avatar: 'cabinet' });
   await g2.waitFor('window.__retro.snapshot().netplay?.running === true', 120000, 'guest2 in lockstep');
 
   const tabs = { host, g1, g2 };

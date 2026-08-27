@@ -32,7 +32,7 @@ try {
   const guest = await Tab.create(conn, APP, 'GUEST');
 
   // --- host claims a room code ---------------------------------------------
-  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
+  await hostGame(host, { name: 'Ada', avatar: 'joystick' });
   const hostSnap = await host.waitFor(
     'window.__retro.snapshot().status === "ready" && window.__retro.snapshot()',
     25000,
@@ -48,7 +48,7 @@ try {
 
   // --- a wrong code fails fast, not after the full timeout ------------------
   const badStart = Date.now();
-  await joinGame(guest, 'ZZZZ-ZZZZ-ZZZZ', { name: 'Hannah Dundee', avatar: 'trike' });
+  await joinGame(guest, 'ZZZZ-ZZZZ-ZZZZ', { name: 'Bo', avatar: 'coin' });
   const badMsg = await guest.waitFor(
     '(() => { const t = document.getElementById("landing-error").textContent; return t ? t : false; })()',
     20000,
@@ -59,7 +59,7 @@ try {
   check('bad room code fails fast (<10s)', badElapsed < 10000, `${badElapsed}ms`);
 
   // --- guest joins the real room -------------------------------------------
-  await joinGame(guest, roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
+  await joinGame(guest, roomCode, { name: 'Bo', avatar: 'coin' });
   const guestSnap = await guest.waitFor(
     'window.__retro.snapshot().selfSlot !== null && window.__retro.snapshot()',
     25000,

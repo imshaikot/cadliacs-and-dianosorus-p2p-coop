@@ -66,7 +66,7 @@ async function bringUp(tab) {
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
+  await hostGame(host, { name: 'Ada', avatar: 'joystick' });
   const boot = await bringUp(host);
   check('production build asks for a ROM instead of finding one', true);
   check('picked ROM boots the emulator', boot.emulator.running === true, `frame ${boot.emulator.frame}`);
@@ -83,7 +83,7 @@ try {
   check('dev-only hooks are stripped from the bundle', hasDevHook === false);
 
   const guest = await Tab.create(conn, APP, 'GUEST');
-  await joinGame(guest, boot.roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
+  await joinGame(guest, boot.roomCode, { name: 'Bo', avatar: 'coin' });
   await bringUp(guest);
   await guest.waitFor('window.__retro.snapshot().netplay?.running === true', 90000, 'guest in lockstep');
   await host.waitFor('window.__retro.snapshot().netplay?.running === true', 60000, 'host in lockstep');
