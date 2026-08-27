@@ -9,26 +9,226 @@
   </head>
   <body>
     <main class="app">
-      <header class="masthead">
-        <h1>CADILLACS &amp; DINOSAURS</h1>
-        <p class="sub">3-player online co-op · deterministic lockstep · WebRTC</p>
+      <!--
+        The board's status line. A CPS-1 cabinet in service mode puts what it
+        knows about itself along the top, so the one live fact we have before
+        anybody joins — which broker is signalling — goes here rather than
+        floating under the marquee.
+      -->
+      <div class="sysbar">
+        <span class="sysbar-id">CPS-1.5 service mode</span>
         <p class="broker" id="broker-line"></p>
+      </div>
+
+      <header class="masthead">
+        <div class="marquee">
+          <!--
+            Attract-screen backdrop: Xenozoic sunset, a sauropod on the ridge
+            and one of the Cadillacs. Silhouettes only, drawn inline so a clone
+            has no image to fetch. Decorative — aria-hidden, pointer-events off.
+
+            Every colour in here is one a 12-bit CPS-1 palette could hold, and
+            nothing blends: the sky is hard bands and the sun is hard rings,
+            with 2px checkerboard dither across each boundary the way the
+            board's own artists faked the shades they did not have.
+          -->
+          <svg
+            class="marquee-art"
+            viewBox="0 0 1200 280"
+            preserveAspectRatio="xMidYMax slice"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <!-- Hard stops: a banded sky, not a gradient. -->
+              <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#000011" />
+                <stop offset="0.46" stop-color="#000011" />
+                <stop offset="0.46" stop-color="#001122" />
+                <stop offset="0.60" stop-color="#001122" />
+                <stop offset="0.60" stop-color="#112233" />
+                <stop offset="0.70" stop-color="#112233" />
+                <stop offset="0.70" stop-color="#223344" />
+                <stop offset="0.78" stop-color="#223344" />
+                <stop offset="0.78" stop-color="#553333" />
+                <stop offset="0.86" stop-color="#553333" />
+                <stop offset="0.86" stop-color="#993322" />
+                <stop offset="1" stop-color="#993322" />
+              </linearGradient>
+
+              <!--
+                One checkerboard per boundary. A pattern cannot pick up
+                `currentColor` from whatever references it, so each shade of the
+                sun's ramp needs its own — four patterns, four ring boundaries.
+              -->
+              <pattern id="dth-1" width="4" height="4" patternUnits="userSpaceOnUse">
+                <rect width="2" height="2" fill="#552222" />
+                <rect x="2" y="2" width="2" height="2" fill="#552222" />
+              </pattern>
+              <pattern id="dth-2" width="4" height="4" patternUnits="userSpaceOnUse">
+                <rect width="2" height="2" fill="#882222" />
+                <rect x="2" y="2" width="2" height="2" fill="#882222" />
+              </pattern>
+              <pattern id="dth-3" width="4" height="4" patternUnits="userSpaceOnUse">
+                <rect width="2" height="2" fill="#cc4422" />
+                <rect x="2" y="2" width="2" height="2" fill="#cc4422" />
+              </pattern>
+              <pattern id="dth-4" width="4" height="4" patternUnits="userSpaceOnUse">
+                <rect width="2" height="2" fill="#ff7744" />
+                <rect x="2" y="2" width="2" height="2" fill="#ff7744" />
+              </pattern>
+
+              <!-- one frond, reused around each cycad crown -->
+              <path id="frond" d="M0,0 C42,-20 104,-24 156,-9 C104,7 42,11 0,0 Z" />
+
+              <g id="sauropod">
+                <path
+                  d="M-52,-16 C-96,-30 -128,-72 -132,-118"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="19"
+                  stroke-linecap="round"
+                />
+                <ellipse cx="-140" cy="-124" rx="20" ry="10" transform="rotate(-18 -140 -124)" />
+                <ellipse cx="0" cy="-40" rx="64" ry="30" />
+                <path
+                  d="M62,-42 C118,-46 156,-62 196,-84"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="15"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M186,-80 C214,-92 236,-100 258,-104"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="7"
+                  stroke-linecap="round"
+                />
+                <rect x="-40" y="-52" width="21" height="54" rx="8" />
+                <rect x="-12" y="-52" width="19" height="52" rx="8" />
+                <rect x="20" y="-52" width="21" height="54" rx="8" />
+                <rect x="46" y="-52" width="18" height="51" rx="8" />
+              </g>
+
+              <g id="cadillac">
+                <!--
+                  A 1959 hardtop reduced to its outline. Proportions are what
+                  make it read at this size: a low slab of greenhouse over a
+                  body twice its depth, a long hood, and the fin. Origin is on
+                  the ground line, so the wheels are tangent to y=0.
+                -->
+                <path
+                  d="M0,-22 L4,-53 L27,-34 L60,-36
+                     C69,-47 83,-52 101,-52 L135,-51
+                     C147,-50 153,-42 157,-35
+                     L201,-32 C211,-31 215,-27 215,-21
+                     L215,-17 C215,-14 213,-13 209,-13
+                     L6,-13 C2,-13 0,-15 0,-19 Z"
+                />
+                <circle cx="54" cy="-13" r="13" />
+                <circle cx="169" cy="-13" r="13" />
+              </g>
+            </defs>
+
+            <rect width="1200" height="280" fill="url(#dusk)" />
+
+            <!-- The sun, as five flat rings with a dithered edge on each. -->
+            <g transform="translate(286,212)">
+              <circle r="150" fill="#331122" />
+              <circle r="134" fill="none" stroke="url(#dth-1)" stroke-width="32" />
+              <circle r="118" fill="#552222" />
+              <circle r="105" fill="none" stroke="url(#dth-2)" stroke-width="26" />
+              <circle r="92" fill="#882222" />
+              <circle r="81" fill="none" stroke="url(#dth-3)" stroke-width="22" />
+              <circle r="70" fill="#cc4422" />
+              <circle r="61" fill="none" stroke="url(#dth-4)" stroke-width="18" />
+              <circle r="52" fill="#ff7744" />
+            </g>
+
+            <!-- far ridge -->
+            <path
+              d="M0,212 L110,188 L226,204 L332,176 L436,200 L548,184 L664,206
+                 L784,178 L902,202 L1020,186 L1132,206 L1200,194 L1200,280 L0,280 Z"
+              fill="#001122"
+            />
+
+            <use href="#sauropod" transform="translate(742,214) scale(0.34)" fill="#113344" color="#113344" />
+            <use href="#sauropod" transform="translate(1004,236) scale(0.7)" fill="#000000" color="#000000" />
+
+            <!-- near ground -->
+            <path d="M0,236 Q300,226 600,234 T1200,230 L1200,280 L0,280 Z" fill="#000000" />
+
+            <g transform="translate(148,231) scale(0.95)">
+              <!-- Headlights, in three flat steps rather than a fade. -->
+              <path d="M215,-28 L285,-34 L285,-20 L215,-16 Z" fill="#664433" />
+              <path d="M285,-34 L350,-42 L350,-14 L285,-20 Z" fill="#332211" />
+              <path d="M350,-42 L415,-52 L415,-6 L350,-14 Z" fill="#112233" />
+              <g fill="#000000"><use href="#cadillac" /></g>
+              <rect x="209" y="-30" width="8" height="8" fill="#ffddaa" />
+            </g>
+
+            <!-- cycad crowns bracketing the plate -->
+            <g fill="#000000">
+              <g transform="translate(38,260)">
+                <use href="#frond" transform="rotate(-118) scale(0.78)" />
+                <use href="#frond" transform="rotate(-92) scale(0.92)" />
+                <use href="#frond" transform="rotate(-64) scale(0.85)" />
+                <use href="#frond" transform="rotate(-34) scale(0.7)" />
+                <use href="#frond" transform="rotate(-8) scale(0.6)" />
+              </g>
+              <g transform="translate(1166,256) scale(-1,1)">
+                <use href="#frond" transform="rotate(-122) scale(0.72)" />
+                <use href="#frond" transform="rotate(-96) scale(0.88)" />
+                <use href="#frond" transform="rotate(-68) scale(0.8)" />
+                <use href="#frond" transform="rotate(-40) scale(0.66)" />
+                <use href="#frond" transform="rotate(-12) scale(0.56)" />
+              </g>
+            </g>
+          </svg>
+
+          <div class="marquee-inner">
+            <h1 class="logo" aria-label="Cadillacs and Dinosaurs">
+              <span class="logo-top">Cadillacs</span>
+              <span class="logo-and">and</span>
+              <span class="logo-bot">Dinosaurs</span>
+            </h1>
+            <p class="sub">3-player online co-op · deterministic lockstep · WebRTC</p>
+          </div>
+        </div>
       </header>
 
       <!--
         Gotcha #6: an AudioContext will not start without a user gesture, and
-        from M2 the guest's <video> needs one to play with sound. Clicking one
-        of these two buttons is that gesture, which is why nothing at all
-        happens on page load.
+        remote voice needs one to play with sound. Clicking one of these two
+        buttons is that gesture, which is why nothing at all happens on page
+        load. Sticky activation does not expire, so the identity dialog in
+        between costs us nothing.
       -->
-      <section class="panel" id="view-landing">
+      <section class="panel cabinet" id="view-landing">
+        <p class="coin">insert coin · 3 players max</p>
+
+        <!--
+          The three slots, drawn as the colour-bar block an arcade board shows
+          when it is testing its own video. Each bar is a four-step ramp in that
+          player's hue — the steps are visible because 12-bit colour has that
+          few of them, which is the point.
+        -->
+        <ul class="crew">
+          <li data-slot="1"><b>P1</b><span>Jack Tenrec</span></li>
+          <li data-slot="2"><b>P2</b><span>Hannah Dundee</span></li>
+          <li data-slot="3"><b>P3</b><span>Mustapha Cairo</span></li>
+        </ul>
+
         <div class="landing-grid">
           <div class="join">
-            <label for="btn-host">START A NEW ROOM</label>
-            <button class="big" id="btn-host" type="button">HOST A GAME</button>
+            <label for="btn-host">Start a new room</label>
+            <p class="hint">You get a room code. Hand it to two friends.</p>
+            <button class="big primary" id="btn-host" type="button">Host a game</button>
           </div>
           <form class="join" id="join-form">
-            <label for="input-code">JOIN A GAME</label>
+            <label for="input-code">Join a game</label>
+            <p class="hint">Type the code a friend gave you.</p>
             <input
               id="input-code"
               name="code"
@@ -38,16 +238,68 @@
               spellcheck="false"
               maxlength="20"
             />
-            <button class="big" id="btn-join" type="submit">JOIN</button>
+            <button class="big" id="btn-join" type="submit">Join</button>
           </form>
         </div>
+
         <p class="error" id="landing-error" role="alert"></p>
+
+        <!-- The serial plate on the back of the cabinet: what this thing is. -->
+        <dl class="plate">
+          <div><dt>Video</dt><dd>384 × 224</dd></div>
+          <div><dt>Frame</dt><dd>59.63 Hz</dd></div>
+          <div><dt>Audio</dt><dd>48002.15 Hz</dd></div>
+          <div><dt>Colour</dt><dd>12-bit</dd></div>
+        </dl>
+        <p class="footnote">
+          Inputs travel, pixels do not. Every player supplies their own ROM.
+        </p>
       </section>
+
+      <!--
+        Both HOST and JOIN come through here. A name is mandatory, so the
+        confirm button stays disabled until there is one; the avatar grid is
+        radio inputs so keyboard and screen-reader behaviour come for free.
+        <dialog> needs no user activation to open and gives us focus trapping
+        and Escape-to-cancel without any code.
+      -->
+      <dialog class="identity" id="identity-modal">
+        <form method="dialog" id="identity-form">
+          <h2 id="identity-title">Who are you</h2>
+
+          <div class="identity-body">
+            <label class="field" for="input-name">Your name</label>
+            <input
+              id="input-name"
+              name="name"
+              placeholder="ENTER YOUR NAME"
+              autocomplete="nickname"
+              spellcheck="false"
+              maxlength="16"
+              required
+            />
+
+            <p class="field">Pick a fighter</p>
+            <div class="avatar-grid" id="avatar-grid" role="radiogroup" aria-label="Pick a fighter"></div>
+
+            <p class="mic-note" id="identity-note">
+              your browser will ask for the microphone. you join <b>muted</b> —
+              press <kbd>M</kbd> to talk.
+            </p>
+            <p class="error" id="identity-error" role="alert"></p>
+
+            <menu>
+              <button type="button" class="small" id="btn-identity-cancel">cancel</button>
+              <button type="submit" class="big primary" id="btn-identity-go">Host a game</button>
+            </menu>
+          </div>
+        </form>
+      </dialog>
 
       <section class="panel" id="view-room" hidden>
         <div class="room-head">
           <div class="code-block">
-            <span class="code-label" id="code-label">ROOM CODE</span>
+            <span class="code-label" id="code-label">Room code</span>
             <code class="code" id="room-code">--------</code>
             <button id="btn-copy" type="button" class="small">copy</button>
           </div>
@@ -57,19 +309,49 @@
           </div>
         </div>
 
-        <ol class="roster" id="roster"></ol>
+        <!--
+          The lobby. One card per player in the room, and the microphone control
+          sits on your own portrait rather than off in the page furniture — the
+          thing you toggle and the face it belongs to are the same object.
+          Rebuilt wholesale on every roster change, so the buttons inside it are
+          reached by delegation from #roster rather than bound individually.
+        -->
+        <section class="lobby">
+          <h2 class="lobby-head">
+            Lobby <span class="lobby-count" id="lobby-count"></span>
+          </h2>
+          <ol class="roster" id="roster"></ol>
+        </section>
 
-        <!-- Host: the emulator canvas. M2 mounts the guest's <video> alongside. -->
-        <div class="stage" id="stage">
-          <canvas id="screen" width="384" height="224" hidden></canvas>
-          <p class="stage-placeholder" id="stage-message">waiting</p>
-          <div class="rom-picker" id="rom-picker" hidden>
-            <p>Select your own <code>dino.zip</code> to start the emulator.</p>
-            <input type="file" id="rom-file" accept=".zip,application/zip" />
+        <!--
+          The emulator canvas and the two HUD lines share a wrapper because the
+          wrapper is what goes fullscreen: the HUDs then overlay the bottom of
+          the screen instead of being left behind on the page.
+        -->
+        <div class="stage-wrap" id="stage-wrap">
+          <div class="stage" id="stage">
+            <canvas id="screen" width="384" height="224" hidden></canvas>
+            <p class="stage-placeholder" id="stage-message">waiting</p>
+            <div class="rom-picker" id="rom-picker" hidden>
+              <p>Select your own <code>dino.zip</code> to start the emulator.</p>
+              <input type="file" id="rom-file" accept=".zip,application/zip" />
+            </div>
+            <button class="small stage-btn" id="btn-fullscreen" type="button" hidden
+                    title="Fullscreen (F, or double-click the screen)"
+                    aria-pressed="false">fullscreen</button>
+          </div>
+          <!--
+            Who is talking, over the picture. Inside the stage wrapper on
+            purpose: that is the element that goes fullscreen, so the indicator
+            comes along instead of being left behind on the page.
+          -->
+          <div class="speaking" id="speaking" hidden aria-live="polite"></div>
+
+          <div class="hud-rows">
+            <p class="hud" id="emu-hud" hidden></p>
+            <p class="hud netplay" id="net-hud" hidden></p>
           </div>
         </div>
-        <p class="hud" id="emu-hud" hidden></p>
-        <p class="hud netplay" id="net-hud" hidden></p>
 
         <form class="chat" id="chat-form">
           <input id="chat-input" placeholder="type a message to test the control channel" autocomplete="off" />
@@ -78,17 +360,59 @@
         <ol class="chat-log" id="chat-log"></ol>
       </section>
 
+      <!--
+        Controls. Deliberately outside #view-room: someone should be able to set
+        a stick up and calibrate it before they join anything, and still watch
+        the legend light up while they play.
+      -->
+      <section class="panel controls" id="view-controls">
+        <div class="controls-head">
+          <h2>Controls</h2>
+          <span class="controls-who" id="controls-who">not in a room</span>
+          <span class="pad-pill" id="pad-pill" data-state="none">no gamepad</span>
+          <button class="small" id="btn-controls-reset" type="button">defaults</button>
+        </div>
+
+        <ol class="control-list" id="control-list"></ol>
+
+        <!--
+          Hidden until a gamepad exists. A deadzone slider with no axes to apply
+          it to is a mystery knob, and the browser reveals no pad at all until a
+          button has been pressed on it.
+        -->
+        <div class="calib" id="calib" hidden>
+          <div class="calib-row">
+            <label for="deadzone">deadzone</label>
+            <input type="range" id="deadzone" min="0.05" max="0.8" step="0.01" value="0.35" />
+            <output id="deadzone-out" for="deadzone">0.35</output>
+            <button class="small" id="btn-calibrate" type="button">centre sticks</button>
+          </div>
+          <ol class="axes" id="axis-meters"></ol>
+        </div>
+
+        <p class="controls-hint" id="controls-hint"></p>
+      </section>
+
       <section class="panel diagnostics">
         <details open>
-          <summary>data channels</summary>
+          <summary>Data channels</summary>
           <pre id="channel-table">no peers yet</pre>
         </details>
         <details open>
-          <summary>log</summary>
+          <summary>Log</summary>
           <ol class="log" id="log-list"></ol>
         </details>
       </section>
     </main>
+
+    <!-- The avatar <symbol> defs, and the <audio> element per talking peer. -->
+    <svg id="avatar-defs" aria-hidden="true" focusable="false" style="display: none"></svg>
+    <!--
+      Not `hidden`: an <audio> element still plays under display:none, but the
+      rule is thin enough ice that this stays out of the layout instead.
+    -->
+    <div id="voice-sinks" class="voice-sinks"></div>
+
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>
