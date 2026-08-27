@@ -37,6 +37,25 @@ async function bringUp(tab) {
     60000,
     'the ROM picker (production has no dev-server ROM)',
   );
+  /*
+   * Not just `!hidden`: production is the ONLY place this picker ever appears,
+   * and setFileInput drives the input over CDP, which works perfectly on an
+   * element no human could reach. That combination hid a real bug — a canvas
+   * that was `hidden` in the DOM but still painting black over the whole stage,
+   * because an author `display` beat the UA's `[hidden]` rule. So hit-test it:
+   * ask the document what is actually at the centre of the file input.
+   */
+  const reachable = await tab.eval(`(() => {
+    const input = document.getElementById('rom-file');
+    const r = input.getBoundingClientRect();
+    if (!r.width || !r.height) return 'the file input has no box';
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return input.contains(hit) || hit === input ? true : 'covered by ' +
+      (hit ? (hit.id || hit.tagName) + '.' + (hit.className || '') : 'nothing');
+  })()`);
+  check(`${tab.name}: the ROM picker is actually clickable`, reachable === true,
+    reachable === true ? '' : String(reachable));
+
   await tab.setFileInput('#rom-file', ROM);
   return tab.waitFor(
     'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',

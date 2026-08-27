@@ -745,6 +745,16 @@ input:focus {
   /* CPS-1 is 384x224 of deliberate pixel art; never let the browser smooth it. */
   image-rendering: pixelated;
 }
+/*
+ * The same trap `.speaking` documents further down, and this one shipped: an
+ * author `display` outranks the UA's `[hidden] { display: none }`, so a canvas
+ * that JS had hidden still laid out at the full size of the stage and painted
+ * black over the ROM picker underneath it. In production — the only place
+ * without a dev-server ROM — that left nothing to click but a black rectangle.
+ * verify-prod missed it because it set the file input through CDP, which needs
+ * no visible element; it now hit-tests the picker instead.
+ */
+#screen[hidden] { display: none; }
 .rom-picker {
   text-align: center;
   color: var(--dim);
