@@ -1,5 +1,5 @@
 /**
- * Minimal Chrome DevTools Protocol driver. Zero npm dependencies: Node 26 has a
+ * Minimal Chrome DevTools Protocol driver. Zero dependencies: Node 26 has a
  * global WebSocket. Used to verify milestones by driving real browser tabs with
  * real input events, reading real console output, and taking real screenshots.
  */

@@ -9,6 +9,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
+import { hostGame, joinGame } from './app.mjs';
 import { KEYS, bit } from './keys.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
@@ -83,7 +84,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await host.clickSelector('#btn-host');
+  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const boot = await host.waitFor(
     'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
     120000,
@@ -91,8 +92,7 @@ try {
   );
 
   const guest = await Tab.create(conn, APP, 'GUEST');
-  await guest.typeInto('#input-code', boot.roomCode);
-  await guest.clickSelector('#btn-join');
+  await joinGame(guest, boot.roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
   await guest.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest in lockstep');
   await host.waitFor('window.__dino.snapshot().netplay?.running === true', 60000, 'host in lockstep');
   check('both peers in lockstep', true);

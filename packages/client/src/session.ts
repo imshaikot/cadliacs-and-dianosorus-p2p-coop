@@ -4,9 +4,13 @@ import {
   PROTOCOL_VERSION,
   PeerJsTransport,
   Signal,
+  DEFAULT_AVATAR,
+  coerceAvatar,
+  coerceName,
   formatRoomCode,
 } from '@dino/shared';
 import type {
+  AvatarId,
   BrokerConfig,
   ChannelDiagnostics,
   ControlMessage,
@@ -18,6 +22,7 @@ import type {
   TransportRole,
   TransportStatus,
   Unsubscribe,
+  VoiceDiagnostics,
 } from '@dino/shared';
 
 import type { Log } from './log.js';
@@ -34,8 +39,11 @@ export interface Player {
   peerId: PeerId;
   slot: PlayerSlot;
   label: string;
+  avatar: AvatarId;
   isSelf: boolean;
   joinedAt: number;
+  /** Microphone state, from that peer's own `voice` broadcast. */
+  muted: boolean;
 }
 
 export interface SessionOptions {
@@ -43,17 +51,30 @@ export interface SessionOptions {
   roomCode: string;
   broker: BrokerConfig;
   label: string;
+  avatar: AvatarId;
   log: Log;
 }
 
 /** The host always drives player 1: it is the machine running the emulator. */
 const HOST_SLOT: PlayerSlot = 1;
 
+/**
+ * A name is a string a remote machine controls, so it is cleaned on the way in
+ * and given a fallback that is at least useful. `coerceName` handles the abuse
+ * (control characters, 4 kB of zero-width spaces); the slot handles the blank.
+ */
+function nameOr(raw: unknown, slot: PlayerSlot): string {
+  return coerceName(raw) || `P${slot}`;
+}
+
 export class Session {
   readonly role: TransportRole;
   readonly #transport: Transport;
   readonly #log: Log;
   readonly #label: string;
+  readonly #avatar: AvatarId;
+  /** Ours. Everyone joins muted; talking is a deliberate act. */
+  #muted = true;
 
   #players = new Map<PeerId, Player>();
   /** Slots learned from the host's roster, which may arrive before the peer. */
@@ -74,13 +95,17 @@ export class Session {
   constructor(options: SessionOptions) {
     this.role = options.role;
     this.#log = options.log;
-    this.#label = options.label;
+    // The UI will not let a blank name through; this is the belt to that
+    // braces. The interesting fallback is on the receiving side, where the
+    // slot is known and `P2` beats anything we could invent here.
+    this.#label = coerceName(options.label) || 'player';
+    this.#avatar = coerceAvatar(options.avatar);
     this.#roomCode = options.roomCode;
     this.#transport = new PeerJsTransport({
       role: options.role,
       roomCode: options.roomCode,
       broker: options.broker,
-      label: options.label,
+      label: this.#label,
     });
   }
 
@@ -101,6 +126,15 @@ export class Session {
   }
   get status(): TransportStatus {
     return this.#status;
+  }
+  get label(): string {
+    return this.#label;
+  }
+  get avatar(): AvatarId {
+    return this.#avatar;
+  }
+  get muted(): boolean {
+    return this.#muted;
   }
   get players(): Player[] {
     return [...this.#players.values()].sort((a, b) => a.slot - b.slot);
@@ -155,8 +189,10 @@ export class Session {
         peerId: result.selfId,
         slot: HOST_SLOT,
         label: this.#label,
+        avatar: this.#avatar,
         isSelf: true,
         joinedAt: Date.now(),
+        muted: this.#muted,
       });
       if (result.regenerated) {
         this.#log.warn('room code was already claimed on the broker, rolled a new one', {
@@ -166,7 +202,12 @@ export class Session {
       this.#log.info('hosting', { selfId: result.selfId, roomCode: this.prettyRoomCode });
     } else {
       this.#log.info('connected to host, sending hello', { selfId: result.selfId });
-      this.#transport.sendControl({ t: 'hello', protocol: PROTOCOL_VERSION, label: this.#label });
+      this.#transport.sendControl({
+        t: 'hello',
+        protocol: PROTOCOL_VERSION,
+        label: this.#label,
+        avatar: this.#avatar,
+      });
     }
   }
 
@@ -189,11 +230,16 @@ export class Session {
           this.#addPlayer({
             peerId: peer.id,
             slot: HOST_SLOT,
-            label: peer.label,
+            label: nameOr(peer.label, HOST_SLOT),
+            avatar: DEFAULT_AVATAR,
             isSelf: false,
             joinedAt: peer.joinedAt,
+            muted: true,
           });
         }
+        // A peer that meshed late has never seen our `voice` broadcast, so it
+        // would have us pegged as muted until the next time we toggled.
+        this.#transport.sendControl({ t: 'voice', muted: this.#muted }, peer.id);
       }),
       t.onPeerLeave((peerId, reason) => {
         const player = this.#players.get(peerId);
@@ -229,12 +275,20 @@ export class Session {
         this.#addPlayer({
           peerId: from,
           slot,
-          label: msg.label || from,
+          label: nameOr(msg.label, slot),
+          avatar: coerceAvatar(msg.avatar),
           isSelf: false,
           joinedAt: Date.now(),
+          muted: true,
         });
         this.#transport.sendControl(
-          { t: 'welcome', protocol: PROTOCOL_VERSION, slot, label: this.#label },
+          {
+            t: 'welcome',
+            protocol: PROTOCOL_VERSION,
+            slot,
+            label: this.#label,
+            avatar: this.#avatar,
+          },
           from,
         );
         this.#log.info(`player ${slot} joined`, { peerId: from, label: msg.label });
@@ -245,13 +299,18 @@ export class Session {
         if (this.role !== 'guest' || this.#selfId === null) return;
         this.#selfSlot = msg.slot;
         const host = this.#players.get(from);
-        if (host) host.label = msg.label || host.label;
+        if (host) {
+          host.label = nameOr(msg.label, HOST_SLOT);
+          host.avatar = coerceAvatar(msg.avatar);
+        }
         this.#addPlayer({
           peerId: this.#selfId,
           slot: msg.slot,
           label: this.#label,
+          avatar: this.#avatar,
           isSelf: true,
           joinedAt: Date.now(),
+          muted: this.#muted,
         });
         this.#log.info(`host assigned us player ${msg.slot}`, { host: from });
         return;
@@ -270,6 +329,14 @@ export class Session {
       }
       case 'bye': {
         this.#log.net('peer said goodbye', { peerId: from, reason: msg.reason });
+        return;
+      }
+      case 'voice': {
+        const player = this.#players.get(from);
+        if (!player || player.muted === msg.muted) return;
+        player.muted = msg.muted;
+        this.#log.net(`P${player.slot} microphone ${msg.muted ? 'muted' : 'live'}`, { peerId: from });
+        this.roster.emit(this.players);
         return;
       }
       case 'chat': {
@@ -291,7 +358,12 @@ export class Session {
     if (this.role !== 'host') return;
     this.#transport.sendControl({
       t: 'roster',
-      players: this.players.map((p) => ({ peerId: p.peerId, slot: p.slot, label: p.label })),
+      players: this.players.map((p) => ({
+        peerId: p.peerId,
+        slot: p.slot,
+        label: p.label,
+        avatar: p.avatar,
+      })),
     });
   }
 
@@ -303,7 +375,9 @@ export class Session {
    * end up with two connections, so the lower peer ID does the dialling and the
    * higher one waits. Arbitrary, but both sides agree on it without talking.
    */
-  #applyRoster(entries: Array<{ peerId: PeerId; slot: PlayerSlot; label: string }>): void {
+  #applyRoster(
+    entries: Array<{ peerId: PeerId; slot: PlayerSlot; label: string; avatar: string }>,
+  ): void {
     const selfId = this.#selfId;
     if (selfId === null) return;
     for (const entry of entries) {
@@ -312,14 +386,18 @@ export class Session {
       const existing = this.#players.get(entry.peerId);
       if (existing) {
         existing.slot = entry.slot;
-        existing.label = entry.label || existing.label;
+        existing.label = nameOr(entry.label, entry.slot);
+        existing.avatar = coerceAvatar(entry.avatar);
       } else {
         this.#players.set(entry.peerId, {
           peerId: entry.peerId,
           slot: entry.slot,
-          label: entry.label || entry.peerId,
+          label: nameOr(entry.label, entry.slot),
+          avatar: coerceAvatar(entry.avatar),
           isSelf: false,
           joinedAt: Date.now(),
+          // Mute state is that peer's to announce, not the host's to relay.
+          muted: true,
         });
       }
       if (selfId < entry.peerId) this.#transport.dial(entry.peerId);
@@ -349,6 +427,23 @@ export class Session {
     this.roster.emit(this.players);
   }
 
+  /**
+   * Announce our microphone to everyone.
+   *
+   * The actual muting is `track.enabled` inside `Voice`; this is only the part
+   * the other players need to see. Broadcast direct to every peer rather than
+   * through the host's roster — the mesh already reaches everyone in one hop.
+   */
+  setMuted(muted: boolean): void {
+    if (this.#muted === muted) return;
+    this.#muted = muted;
+    const self = this.#selfId === null ? undefined : this.#players.get(this.#selfId);
+    if (self) self.muted = muted;
+    this.#transport.sendControl({ t: 'voice', muted });
+    this.#log.info(`microphone ${muted ? 'muted' : 'live'}`);
+    this.roster.emit(this.players);
+  }
+
   /** M0 smoke test: prove arbitrary strings cross the control channel. */
   sendChat(text: string): void {
     const trimmed = text.trim();
@@ -365,6 +460,10 @@ export class Session {
 
   describeChannels(): ChannelDiagnostics[] {
     return this.#transport.describeChannels();
+  }
+
+  describeVoice(): VoiceDiagnostics[] {
+    return this.#transport.describeVoice();
   }
 
   async peerStats(): Promise<Record<PeerId, PeerStats | null>> {

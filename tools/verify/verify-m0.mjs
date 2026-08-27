@@ -10,6 +10,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
+import { hostGame, joinGame } from './app.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
 const OUT = new URL('./shots/', import.meta.url).pathname;
@@ -31,7 +32,7 @@ try {
   const guest = await Tab.create(conn, APP, 'GUEST');
 
   // --- host claims a room code ---------------------------------------------
-  await host.clickSelector('#btn-host');
+  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const hostSnap = await host.waitFor(
     'window.__dino.snapshot().status === "ready" && window.__dino.snapshot()',
     25000,
@@ -47,8 +48,7 @@ try {
 
   // --- a wrong code fails fast, not after the full timeout ------------------
   const badStart = Date.now();
-  await guest.typeInto('#input-code', 'ZZZZ-ZZZZ-ZZZZ');
-  await guest.clickSelector('#btn-join');
+  await joinGame(guest, 'ZZZZ-ZZZZ-ZZZZ', { name: 'Hannah Dundee', avatar: 'trike' });
   const badMsg = await guest.waitFor(
     '(() => { const t = document.getElementById("landing-error").textContent; return t ? t : false; })()',
     20000,
@@ -59,8 +59,7 @@ try {
   check('bad room code fails fast (<10s)', badElapsed < 10000, `${badElapsed}ms`);
 
   // --- guest joins the real room -------------------------------------------
-  await guest.typeInto('#input-code', roomCode);
-  await guest.clickSelector('#btn-join');
+  await joinGame(guest, roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
   const guestSnap = await guest.waitFor(
     'window.__dino.snapshot().selfSlot !== null && window.__dino.snapshot()',
     25000,

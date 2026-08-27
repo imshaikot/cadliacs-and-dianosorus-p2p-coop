@@ -8,6 +8,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
+import { hostGame, joinGame } from './app.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
 const OUT = new URL('./shots/', import.meta.url).pathname;
@@ -41,7 +42,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await host.clickSelector('#btn-host');
+  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const hostBoot = await host.waitFor(
     'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
     120000,
@@ -51,8 +52,7 @@ try {
   check('host boots its own emulator', hostBoot.emulator.running === true, `frame ${hostBoot.emulator.frame}`);
 
   const guest = await Tab.create(conn, APP, 'GUEST');
-  await guest.typeInto('#input-code', roomCode);
-  await guest.clickSelector('#btn-join');
+  await joinGame(guest, roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
 
   const guestBoot = await guest.waitFor(
     'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',

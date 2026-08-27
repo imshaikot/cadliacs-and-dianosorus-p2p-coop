@@ -2,7 +2,8 @@ import { generateRoomCode, normalizeRoomCode } from '@dino/shared';
 import type { ChannelDiagnostics, PeerStats, PeerId } from '@dino/shared';
 
 import { loadConfig } from './config.js';
-import { bindKeyboard } from './emulator/input.js';
+import { ControlsPanel } from './controls-panel.js';
+import { LocalControls } from './emulator/controls.js';
 import { Machine } from './emulator/machine.js';
 import { loadRomFromDevServer, loadRomFromFile } from './emulator/rom.js';
 import type { RomSource } from './emulator/rom.js';
@@ -10,6 +11,8 @@ import { Log } from './log.js';
 import { Netplay } from './net/netplay.js';
 import { Session } from './session.js';
 import { UI } from './ui.js';
+import type { Identity } from './ui.js';
+import { Voice } from './voice.js';
 
 const config = loadConfig();
 const log = new Log();
@@ -18,20 +21,34 @@ let session: Session | null = null;
 let channelTimer: number | null = null;
 let machine: Machine | null = null;
 let netplay: Netplay | null = null;
+let voice: Voice | null = null;
 let hudTimer: number | null = null;
-let unbindKeyboard: (() => void) | null = null;
+/** Guards the microphone toggle, which now has to await getUserMedia. */
+let micBusy = false;
+
+// Physical controls outlive any one room: the profile, the gamepad poll and the
+// on-screen legend are all page-scoped, and only the latch they feed changes
+// when we join or leave.
+const controls = new LocalControls();
+const controlsPanel = new ControlsPanel(controls);
 
 const ui = new UI({
-  onHost: () => void begin('host', generateRoomCode()),
-  onJoin: (raw) => {
+  onHost: (identity) => void begin('host', generateRoomCode(), identity),
+  onJoin: (raw, identity) => {
     const code = normalizeRoomCode(raw);
     if (!code) {
+      ui.closeIdentity();
       ui.showError('That does not look like a room code. It is 12 characters.');
       return;
     }
-    void begin('guest', code);
+    void begin('guest', code, identity);
   },
   onLeave: () => void teardown('left the room'),
+  onToggleMic: () => void toggleMic(),
+  onPeerAudible: (peerId, audible) => {
+    voice?.setPeerAudible(peerId, audible);
+    if (session) ui.renderRoster(session.players, (id) => voice?.isPeerAudible(id) ?? true);
+  },
   onChat: (text) => session?.sendChat(text),
   onRomPicked: (file) => {
     void loadRomFromFile(file)
@@ -62,16 +79,61 @@ if (prefill) {
   }
 }
 
-async function begin(role: 'host' | 'guest', roomCode: string): Promise<void> {
+/**
+ * Open or close the microphone, then tell the room.
+ *
+ * Unmuting has to go and fetch a track — a muted player holds no microphone at
+ * all — so this is genuinely asynchronous and the control is held busy across
+ * it. `Voice` may also refuse (a revoked permission, an unplugged device), so
+ * what the room is told is what actually happened, read back afterwards.
+ */
+async function toggleMic(): Promise<void> {
+  const s = session;
+  const v = voice;
+  if (!s || !v || !v.canTalk || micBusy) return;
+  micBusy = true;
+  ui.setMicBusy(true);
+  try {
+    await v.setMuted(!v.muted);
+  } finally {
+    micBusy = false;
+    ui.setMicBusy(false);
+  }
+  s.setMuted(v.muted);
+}
+
+async function begin(role: 'host' | 'guest', roomCode: string, identity: Identity): Promise<void> {
   if (session) return;
   ui.showError('');
   ui.setBusy(true);
 
-  const label = role === 'host' ? 'host' : `guest-${Math.floor(Math.random() * 1000)}`;
-  const next = new Session({ role, roomCode, broker: config.broker, label, log });
-  session = next;
+  // Settle the microphone permission before connecting — but do not hold a
+  // microphone. Everyone joins muted, and muted here means no track exists at
+  // all, so nothing is listening until someone chooses to talk. Saying no is a
+  // fine answer too: that player hears everyone and is not heard.
+  ui.showMicPending();
+  const mic = await Voice.requestPermission(log);
+  voice = mic;
+  ui.closeIdentity();
 
-  next.roster.on((players) => ui.renderRoster(players));
+  const next = new Session({
+    role,
+    roomCode,
+    broker: config.broker,
+    label: identity.name,
+    avatar: identity.avatar,
+    log,
+  });
+  session = next;
+  mic.attach(next.transport, ui.voiceSinks);
+  mic.onSpeakingChange = (speaking) => ui.renderSpeaking(speaking);
+  ui.setMicAvailable(mic.canTalk);
+
+  next.roster.on((players) => {
+    // Voice only measures peers the room says are unmuted; see setPeerMuted.
+    for (const p of players) if (!p.isSelf) mic.setPeerMuted(p.peerId, p.muted);
+    ui.renderRoster(players, (id) => mic.isPeerAudible(id));
+  });
   // Being refused is not an error state to sit in: go back to the landing page
   // and say why, rather than leaving someone staring at a room they are not in.
   next.rejected.on((reason) => {
@@ -90,8 +152,16 @@ async function begin(role: 'host' | 'guest', roomCode: string): Promise<void> {
     ui.showError(explain(err, role));
     session = null;
     next.close('failed to connect');
+    mic.dispose();
+    voice = null;
     ui.showLanding();
     return;
+  }
+
+  if (!mic.canTalk) {
+    log.warn('joined without a microphone, you will hear the others but not be heard', {
+      state: mic.micState,
+    });
   }
 
   ui.showRoom(role, next.roomCode);
@@ -125,6 +195,8 @@ async function bootEmulator(): Promise<void> {
     ui.showStageMessage('The emulator core failed to load. See the log.');
     return;
   }
+  // Sample the gamepad on the emulator's clock rather than the display's.
+  machine.onBeforeFrame = () => controls.poll();
   log.info('emulator core loaded');
 
   ui.showStageMessage('looking for the ROM…');
@@ -189,12 +261,14 @@ async function joinNetplay(m: Machine): Promise<void> {
     log.error('never got a player slot, staying solo', {
       message: err instanceof Error ? err.message : String(err),
     });
-    unbindKeyboard = bindKeyboard(m.latches[0]!);
+    controls.attach(m.latches[0]!);
+    controlsPanel.setSlot(1);
     return;
   }
   const port = slot - 1;
-  unbindKeyboard = bindKeyboard(m.latches[port]!);
-  log.info(`keyboard drives player ${slot}`, { port });
+  controls.attach(m.latches[port]!);
+  controlsPanel.setSlot(slot);
+  log.info(`your controls drive player ${slot}`, { port, gamepad: controls.pad?.id ?? null });
 
   const net = new Netplay({
     session: s,
@@ -287,10 +361,12 @@ async function teardown(reason: string): Promise<void> {
     clearInterval(hudTimer);
     hudTimer = null;
   }
-  unbindKeyboard?.();
-  unbindKeyboard = null;
+  controls.attach(null);
+  controlsPanel.setSlot(null);
   netplay?.detach();
   netplay = null;
+  voice?.dispose();
+  voice = null;
   const m = machine;
   machine = null;
   if (m) await m.dispose();
@@ -325,7 +401,9 @@ declare global {
       logs: Log['entries'];
       session: () => Session | null;
       machine: () => Machine | null;
+      controls: () => LocalControls;
       netplay: () => Netplay | null;
+      voice: () => Voice | null;
       channels: () => ChannelDiagnostics[];
       stats: () => Promise<Record<PeerId, PeerStats | null>>;
       snapshot: () => unknown;
@@ -341,7 +419,9 @@ window.__dino = {
   logs: log.entries,
   session: () => session,
   machine: () => machine,
+  controls: () => controls,
   netplay: () => netplay,
+  voice: () => voice,
   channels: () => session?.describeChannels() ?? [],
   stats: async () => (await session?.peerStats()) ?? {},
   snapshot: () => ({
@@ -351,7 +431,20 @@ window.__dino = {
     selfSlot: session?.selfSlot ?? null,
     roomCode: session?.roomCode ?? null,
     prettyRoomCode: session?.prettyRoomCode ?? null,
+    fullscreen: ui.fullscreen,
     players: session?.players ?? [],
+    voice: voice
+      ? {
+          micState: voice.micState,
+          canTalk: voice.canTalk,
+          muted: voice.muted,
+          // Zero whenever muted. This is what the recording indicator reports.
+          liveTracks: voice.liveTracks,
+          peers: voice.peers,
+          speaking: [...voice.speaking],
+          calls: session?.describeVoice() ?? [],
+        }
+      : null,
     channels: session?.describeChannels() ?? [],
     emulator: machine
       ? { running: machine.running, targetFps: machine.core.fps, sampleRate: machine.core.sampleRate, ...machine.stats }
@@ -369,5 +462,8 @@ window.__dino = {
 };
 
 if (import.meta.env.DEV) {
-  window.__dino.forceHost = (code) => begin('host', code);
+  // Bypasses the identity dialog on purpose: this exists to exercise the
+  // broker's ID-collision path, and typing a name into a modal is not part of
+  // what it is testing.
+  window.__dino.forceHost = (code) => begin('host', code, { name: 'squatter', avatar: 'skull' });
 }

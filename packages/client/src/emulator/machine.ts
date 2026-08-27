@@ -75,6 +75,17 @@ export class Machine {
    * registered last silently won.
    */
   readonly frameAdvanced = new Signal<[number]>();
+  /**
+   * Runs immediately before each frame latches its input.
+   *
+   * A gamepad is a polled device with no press events, so something has to go
+   * and read it. Doing that from rAF would repeat gotcha #11 one layer up: it
+   * samples at the display's rate rather than the emulator's, and it stops dead
+   * in a backgrounded tab — where, under lockstep, a frozen stick is published
+   * to every other peer. Hanging it here instead puts the pad on exactly the
+   * same once-per-emulated-frame cadence as the keyboard latch.
+   */
+  onBeforeFrame: (() => void) | null = null;
   #raf = 0;
   #running = false;
   #last = 0;
@@ -250,6 +261,7 @@ export class Machine {
    * happened and the emulator has not advanced.
    */
   #step(): boolean {
+    this.onBeforeFrame?.();
     const masks = this.#driver ? this.#driver.inputsFor(this.#frame) : this.#soloMasks();
     if (!masks) return false;
     for (let port = 0; port < PORT_COUNT; port += 1) {

@@ -13,8 +13,15 @@
  * See PeerJsTransport.
  */
 
-/** Bumped whenever control or input framing changes incompatibly. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped whenever control or input framing changes incompatibly.
+ *
+ * v2 added the identity fields (`label` gained a companion `avatar`) and the
+ * `voice` message. Strictly speaking a v1 peer could ignore both and still
+ * play — but it would show up nameless, with a default avatar, unable to be
+ * heard. The clean rejection the version check already produces beats that.
+ */
+export const PROTOCOL_VERSION = 2;
 
 /** Player 1 is always the host (it owns the emulator). Guests fill 2 and 3. */
 export type PlayerSlot = 1 | 2 | 3;
@@ -23,9 +30,9 @@ export const GUEST_SLOTS: readonly PlayerSlot[] = [2, 3];
 
 export type ControlMessage =
   /** guest -> host, first thing sent on the control channel. */
-  | { t: 'hello'; protocol: number; label: string }
+  | { t: 'hello'; protocol: number; label: string; avatar: string }
   /** host -> guest, in reply to hello. `slot` is the emulator port to drive. */
-  | { t: 'welcome'; protocol: number; slot: PlayerSlot; label: string }
+  | { t: 'welcome'; protocol: number; slot: PlayerSlot; label: string; avatar: string }
   /** host -> guest, when the room is full or the protocol does not match. */
   | { t: 'reject'; reason: string }
   /** either direction, on deliberate teardown. */
@@ -36,7 +43,19 @@ export type ControlMessage =
    * Guests cannot discover each other through the broker — they only ever knew
    * the host's ID — so the host introduces them. Sent on every change.
    */
-  | { t: 'roster'; players: Array<{ peerId: string; slot: PlayerSlot; label: string }> }
+  | {
+      t: 'roster';
+      players: Array<{ peerId: string; slot: PlayerSlot; label: string; avatar: string }>;
+    }
+  /**
+   * any -> everyone: my microphone just went live, or just went quiet.
+   *
+   * Deliberately NOT part of the roster. The roster is host-authored, so a
+   * guest's toggle would have to go guest -> host -> everyone; the mesh already
+   * gives every peer a control channel to every other peer, so this is one hop
+   * and stays clear of the membership machinery entirely.
+   */
+  | { t: 'voice'; muted: boolean }
   /** guest -> host: my core is up and I have a ROM, deal me in. */
   | { t: 'ready'; port: number }
   /**
@@ -86,6 +105,7 @@ export function decodeControl(raw: unknown): ControlMessage | null {
     case 'begin':
     case 'begun':
     case 'desync':
+    case 'voice':
     case 'chat':
       return parsed as ControlMessage;
     default:

@@ -15,7 +15,7 @@ export type TransportRole = 'host' | 'guest';
  * (`maxRetransmits: 0`), which PeerJS does not expose. When that happens, the
  * only file that changes is the adapter.
  *
- * Rule enforced by convention and by `npm run lint:layering`: no module outside
+ * Rule enforced by convention and by `yarn lint:layering`: no module outside
  * `peerjs-transport.ts` may import `peerjs`.
  */
 export interface Transport {
@@ -54,12 +54,26 @@ export interface Transport {
   onControl(cb: (from: PeerId, msg: ControlMessage) => void): Unsubscribe;
 
   /**
-   * Host only. Sets the outbound A/V stream: it is offered to every currently
-   * connected peer and to every peer that joins afterwards. Pass `to` to target
-   * a single peer instead.
+   * Establish voice with every peer, now and in future, using this stream.
+   *
+   * Call it once, before `connect()`. What matters is only that it carries an
+   * audio track *at all*: a call set up without one negotiates a `recvonly`
+   * m-line, and nothing can ever be sent down it afterwards short of a
+   * renegotiation, which PeerJS cannot do. So the caller passes a silent
+   * placeholder and swaps the microphone in later with `setOutboundTrack`.
+   *
+   * Symmetric: every peer attaches its own, and one media connection per pair
+   * carries both directions.
    */
-  attachStream(stream: MediaStream, to?: PeerId): void;
-  /** Guest only in practice: fires when the host's A/V stream arrives. */
+  attachStream(stream: MediaStream): void;
+  /**
+   * Swap what our sender is transmitting. Null transmits nothing at all.
+   *
+   * This is `RTCRtpSender.replaceTrack`, which needs no renegotiation, so
+   * toggling a microphone is instant and the call survives it untouched.
+   */
+  setOutboundTrack(track: MediaStreamTrack | null): void;
+  /** Fires when a peer's audio arrives, once per peer. */
   onStream(cb: (from: PeerId, stream: MediaStream) => void): Unsubscribe;
 
   onStatus(cb: (status: TransportStatus, detail: string) => void): Unsubscribe;
@@ -70,6 +84,8 @@ export interface Transport {
   getPeerStats(peerId: PeerId): Promise<PeerStats | null>;
   /** What the underlying data channels actually negotiated. See gotcha #1. */
   describeChannels(): ChannelDiagnostics[];
+  /** Per-peer voice state. The same idea as describeChannels, for media. */
+  describeVoice(): VoiceDiagnostics[];
 
   /**
    * Open a connection to another peer we were told about.
@@ -183,4 +199,29 @@ export interface PeerStats {
   availableOutgoingBitrateBps: number | null;
   bytesSent: number | null;
   bytesReceived: number | null;
+}
+
+/**
+ * What a peer's voice call actually looks like, as opposed to what we intended.
+ *
+ * `hasSender` is the one that matters. A call answered while muted has no place
+ * to put a track, so unmuting later cannot be a `replaceTrack` — it has to tear
+ * the call down and rebuild it. Without this, that distinction is invisible.
+ */
+export interface VoiceDiagnostics {
+  peerId: PeerId;
+  /** True once a MediaConnection exists for this peer, open or otherwise. */
+  hasCall: boolean;
+  open: boolean;
+  /** True when there is a sender to put our microphone into. */
+  hasSender: boolean;
+  /** What that sender is carrying: 'live', 'ended', or null for nothing. */
+  senderTrack: string | null;
+  /** Negotiated transceiver directions. `recvonly` means we cannot be heard. */
+  direction: string | null;
+  /** True once their audio has arrived. */
+  receiving: boolean;
+  connectionState: RTCPeerConnectionState | null;
+  /** How many dials this pair has spent. See MEDIA_CALL_ATTEMPTS. */
+  callAttempts: number;
 }

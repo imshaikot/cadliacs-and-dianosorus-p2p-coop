@@ -1,4 +1,6 @@
+export * from './avatars.js';
 export * from './emitter.js';
+export * from './identity.js';
 export * from './input-packet.js';
 export * from './protocol.js';
 export * from './room-code.js';

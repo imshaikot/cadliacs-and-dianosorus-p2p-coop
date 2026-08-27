@@ -21,9 +21,13 @@
  * channel that rollback wants. Verified at runtime, see `describeChannels()`.
  *
  * Cost of the second channel: PeerJS calls `_startPeerConnection()` per
- * connection, so each guest costs two RTCPeerConnections (three once media is
- * attached in M2) rather than one PC with three channels. Accepted for V1;
+ * connection, so each peer costs two RTCPeerConnections, and three once voice
+ * is attached, rather than one PC carrying three channels. Accepted for V1;
  * V2's raw adapter collapses it.
+ *
+ * Voice rides that third connection as an ordinary PeerJS MediaConnection. It
+ * carries no game state and nothing in the lockstep path waits on it, so a
+ * denied microphone or a dead audio track costs conversation and never a frame.
  */
 import { Peer } from 'peerjs';
 import type { DataConnection, MediaConnection, PeerOptions } from 'peerjs';
@@ -45,6 +49,7 @@ import type {
   TransportOptions,
   TransportRole,
   TransportStatus,
+  VoiceDiagnostics,
 } from './transport.js';
 
 const CONTROL_LABEL = 'dino-ctl';
@@ -57,6 +62,11 @@ const INPUT_SERIALIZATION = 'raw';
 const DEFAULT_CONNECT_TIMEOUT_MS = 20_000;
 /** How many times to roll a fresh room code when the broker ID is squatted. */
 const ID_CLAIM_ATTEMPTS = 4;
+
+/** How long to wait after a voice call drops before re-forming it. */
+const MEDIA_REDIAL_MS = 400;
+/** Stops a voice call that will never form from retrying forever. */
+const MEDIA_CALL_ATTEMPTS = 6;
 
 /** PeerJS error types that leave the Peer unusable. */
 const FATAL_PEER_ERRORS = new Set([
@@ -75,6 +85,10 @@ interface PeerRecord {
   control: DataConnection | null;
   input: DataConnection | null;
   media: MediaConnection | null;
+  /** What `media` is carrying outbound, so a changed microphone is detectable. */
+  mediaStream: MediaStream | null;
+  /** Bounds the re-dial loop in `#adoptCall`. Reset once audio flows. */
+  callAttempts: number;
   announced: boolean;
 }
 
@@ -105,6 +119,8 @@ export class PeerJsTransport implements Transport {
   #records = new Map<PeerId, PeerRecord>();
   /** Host: the stream to offer every peer, including ones that join later. */
   #outboundStream: MediaStream | null = null;
+  /** What the senders should be transmitting. Null while muted. */
+  #outboundTrack: MediaStreamTrack | null = null;
 
   readonly #peerJoin = new Signal<[PeerInfo]>();
   readonly #peerLeave = new Signal<[PeerId, string]>();
@@ -368,21 +384,25 @@ export class PeerJsTransport implements Transport {
 
   #onIncomingCall(call: MediaConnection): void {
     const record = this.#recordFor(call.peer);
+    // Only one end ever dials, so a second call to a peer we already have is
+    // something going wrong rather than something to adopt: taking it would
+    // orphan the connection already carrying audio.
+    if (record.media) {
+      call.close();
+      return;
+    }
     record.media = call;
-    // Answering with no stream: V1 media is one-way, host to guest.
-    call.answer();
-    call.on('stream', (stream) => this.#stream.emit(call.peer, stream));
-    call.on('close', () => {
-      if (record.media === call) record.media = null;
-    });
-    call.on('error', (err: PeerJsError) =>
-      this.#error.emit({
-        code: err?.type ?? 'media-error',
-        message: err?.message ?? String(err),
-        fatal: false,
-        peerId: call.peer,
-      }),
-    );
+    // Answering *with* our own stream is what makes voice two-way over a single
+    // MediaConnection: our track rides the answer, theirs rode the offer, and
+    // both ends get a 'stream' event. Undefined when we have no microphone —
+    // that peer then hears everyone without being heard.
+    const stream = this.#outboundStream;
+    record.mediaStream = stream;
+    // Answering *with* a stream is what makes voice two-way over a single
+    // MediaConnection, and what makes the m-line sendrecv rather than recvonly.
+    call.answer(stream ?? undefined);
+    this.#adoptCall(record, call);
+    this.#applyTrack(record);
   }
 
   #adoptControl(record: PeerRecord, conn: DataConnection): void {
@@ -395,8 +415,8 @@ export class PeerJsTransport implements Transport {
         this.#peerJoin.emit(record.info);
       }
       this.#watchConnectionState(conn);
-      // A guest that joins after the host already has a stream still gets it.
-      if (this.role === 'host' && this.#outboundStream) this.#callPeer(record.info.id);
+      // A peer that arrives after we already have a microphone still gets it.
+      this.#offerVoice(record.info.id);
     });
     conn.on('data', (raw) => {
       const msg = decodeControl(raw);
@@ -493,6 +513,8 @@ export class PeerJsTransport implements Transport {
         control: null,
         input: null,
         media: null,
+        mediaStream: null,
+        callAttempts: 0,
         announced: false,
       };
       this.#records.set(peerId, record);
@@ -568,31 +590,154 @@ export class PeerJsTransport implements Transport {
     }
   }
 
-  attachStream(stream: MediaStream, to?: PeerId): void {
-    if (!to) this.#outboundStream = stream;
-    for (const record of this.#targets(to)) {
-      this.#callPeer(record.info.id, stream);
+  /**
+   * Establish voice with every peer using this stream. Called once, at join.
+   *
+   * The stream is a silent placeholder, not the microphone — see the interface.
+   * All that matters here is that a track exists, so every call negotiates
+   * `sendrecv` and has somewhere to put a microphone later.
+   */
+  attachStream(stream: MediaStream): void {
+    this.#outboundStream = stream;
+    for (const record of this.#records.values()) {
+      if (!record.media) this.#offerVoice(record.info.id);
     }
   }
 
-  #callPeer(peerId: PeerId, stream = this.#outboundStream): void {
+  /**
+   * Swap what we are transmitting, on every call at once. Null sends nothing.
+   *
+   * The whole mute/unmute story is this one line of `replaceTrack`. It needs no
+   * renegotiation, so the call is untouched and a toggle is instant — which is
+   * exactly why `attachStream` goes to the trouble of establishing `sendrecv`
+   * up front, even with nothing to say yet.
+   */
+  setOutboundTrack(track: MediaStreamTrack | null): void {
+    this.#outboundTrack = track;
+    for (const record of this.#records.values()) this.#applyTrack(record);
+  }
+
+  #applyTrack(record: PeerRecord): void {
+    const call = record.media;
+    if (!call) return;
+    const sender = this.#audioSender(call);
+    if (!sender) return;
+    void sender.replaceTrack(this.#outboundTrack).catch((err: unknown) =>
+      this.#error.emit({
+        code: 'replace-track-failed',
+        message: errorMessage(err),
+        fatal: false,
+        peerId: record.info.id,
+      }),
+    );
+  }
+
+  /**
+   * The sender that can actually carry our microphone on a call.
+   *
+   * Direction is the whole point, and `getSenders()` will lie to you about it.
+   * A recvonly transceiver still exposes a sender, with a null track, that
+   * accepts `replaceTrack()` and reports success while transmitting precisely
+   * nothing. Every call here is established with a track so this should always
+   * find one; returning null rather than that phantom sender is what keeps a
+   * failure loud instead of silent.
+   *
+   * `currentDirection` is what was negotiated and null until the answer lands;
+   * `direction` is what we asked for, which is the right answer in that window.
+   */
+  #audioSender(call: MediaConnection): RTCRtpSender | null {
+    const pc = call.peerConnection as RTCPeerConnection | undefined;
+    if (!pc) return null;
+    for (const transceiver of pc.getTransceivers()) {
+      const direction = transceiver.currentDirection ?? transceiver.direction;
+      if (direction === 'sendrecv' || direction === 'sendonly') return transceiver.sender;
+    }
+    return null;
+  }
+
+  /**
+   * Place the voice call to a peer, if we are the end that should.
+   *
+   * One MediaConnection carries both directions (see `#onIncomingCall`), so
+   * exactly one end must dial: the lower peer ID does it, the same arbitrary
+   * tie-break `session.ts` uses for data connections, agreed on by both sides
+   * without exchanging a message. Every peer attaches a stream at join, so the
+   * designated end can always dial — there is no case to fall back for.
+   */
+  #offerVoice(peerId: PeerId): void {
+    const record = this.#records.get(peerId);
+    if (!record || record.media || !this.#outboundStream) return;
+    if (this.#selfId === null || this.#selfId > peerId) return;
+    this.#scheduleCall(peerId, 0);
+  }
+
+  /** Every dial is deferred, so the conditions are re-checked when it fires. */
+  #scheduleCall(peerId: PeerId, delayMs: number): void {
+    setTimeout(() => this.#callPeer(peerId), delayMs);
+  }
+
+  #callPeer(peerId: PeerId): void {
     const peer = this.#peer;
     const record = this.#records.get(peerId);
-    if (!peer || !record || !stream) return;
-    if (record.media) return; // already streaming to this peer
+    if (this.#closed || !peer || !record || record.media) return;
+    const stream = this.#outboundStream;
+    if (!stream || record.callAttempts >= MEDIA_CALL_ATTEMPTS) return;
+    record.callAttempts += 1;
     const call = peer.call(peerId, stream);
     record.media = call;
+    record.mediaStream = stream;
+    this.#adoptCall(record, call);
+    // The call was set up with the placeholder; put the microphone in if one is
+    // already open. A no-op when muted, which is the usual case.
+    this.#applyTrack(record);
+  }
+
+  /** Both ends of a call want the same handlers, whoever placed it. */
+  #adoptCall(record: PeerRecord, call: MediaConnection): void {
+    call.on('stream', (stream) => {
+      // Audio is flowing, so whatever the earlier attempts were about is over.
+      record.callAttempts = 0;
+      this.#stream.emit(call.peer, stream);
+    });
     call.on('close', () => {
-      if (record.media === call) record.media = null;
+      if (record.media !== call) return;
+      record.media = null;
+      record.mediaStream = null;
+      // Either the deliberate teardown from `attachStream` or a call that
+      // dropped. Both want the same thing: form it again. `callAttempts` is what
+      // stops a call that will never succeed from retrying forever.
+      if (!this.#closed) setTimeout(() => this.#offerVoice(call.peer), MEDIA_REDIAL_MS);
     });
     call.on('error', (err: PeerJsError) =>
       this.#error.emit({
         code: err?.type ?? 'media-error',
         message: err?.message ?? String(err),
         fatal: false,
-        peerId,
+        peerId: call.peer,
       }),
     );
+  }
+
+  describeVoice(): VoiceDiagnostics[] {
+    return [...this.#records.values()].map((record) => {
+      const call = record.media;
+      const pc = (call?.peerConnection ?? null) as RTCPeerConnection | null;
+      const sender = call ? this.#audioSender(call) : null;
+      return {
+        peerId: record.info.id,
+        hasCall: call !== null,
+        open: call?.open ?? false,
+        hasSender: sender !== null,
+        senderTrack: sender?.track?.readyState ?? null,
+        direction:
+          (pc?.getTransceivers() ?? [])
+            .map((t) => t.currentDirection ?? t.direction)
+            .join(',') || null,
+        receiving: (pc?.getReceivers() ?? []).some((r) => r.track?.readyState === 'live'),
+        connectionState: pc?.connectionState ?? null,
+        callAttempts: record.callAttempts,
+      };
+    });
   }
 
   #targets(to?: PeerId): PeerRecord[] {

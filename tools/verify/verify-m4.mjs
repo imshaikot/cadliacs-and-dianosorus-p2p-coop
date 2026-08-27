@@ -8,6 +8,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
+import { hostGame, joinGame } from './app.mjs';
 import { KEYS } from './keys.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
@@ -34,10 +35,9 @@ const INSTALL_PROBE = `(() => {
   return true;
 })()`;
 
-async function joinRoom(conn, name, roomCode) {
+async function joinRoom(conn, name, roomCode, player) {
   const tab = await Tab.create(conn, APP, name);
-  await tab.typeInto('#input-code', roomCode);
-  await tab.clickSelector('#btn-join');
+  await joinGame(tab, roomCode, player);
   return tab;
 }
 
@@ -48,7 +48,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await host.clickSelector('#btn-host');
+  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
   const boot = await host.waitFor(
     'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
     120000,
@@ -56,10 +56,10 @@ try {
   );
   const roomCode = boot.roomCode;
 
-  const g1 = await joinRoom(conn, 'GUEST1', roomCode);
+  const g1 = await joinRoom(conn, 'GUEST1', roomCode, { name: 'Hannah Dundee', avatar: 'trike' });
   await g1.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest1 in lockstep');
 
-  const g2 = await joinRoom(conn, 'GUEST2', roomCode);
+  const g2 = await joinRoom(conn, 'GUEST2', roomCode, { name: 'Mustapha Cairo', avatar: 'cadillac' });
   await g2.waitFor('window.__dino.snapshot().netplay?.running === true', 120000, 'guest2 in lockstep');
 
   const tabs = { host, g1, g2 };
@@ -167,7 +167,7 @@ try {
   await g2.screenshot(OUT + 'm4-guest3.png');
 
   // --- a fourth peer is turned away ----------------------------------------
-  const g3 = await joinRoom(conn, 'GUEST4', roomCode);
+  const g3 = await joinRoom(conn, 'GUEST4', roomCode, { name: 'Kirgo', avatar: 'skull' });
   const rejected = await g3.waitFor(
     '(() => { const t = document.getElementById("landing-error").textContent; return t ? t : false; })()',
     30000,

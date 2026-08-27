@@ -1,10 +1,43 @@
-import { formatRoomCode } from '@dino/shared';
-import type { ChannelDiagnostics, TransportStatus } from '@dino/shared';
+import {
+  AVATAR_IDS,
+  DEFAULT_AVATAR,
+  MAX_PLAYERS,
+  coerceAvatar,
+  coerceName,
+  formatRoomCode,
+} from '@dino/shared';
+import type { AvatarId, ChannelDiagnostics, PeerId, TransportStatus } from '@dino/shared';
 
+import { avatarDefs, avatarName, avatarSvg } from './avatars.js';
+import { isTyping } from './emulator/input.js';
 import type { MachineStats } from './emulator/machine.js';
 import type { LockstepStats } from './net/lockstep.js';
 import type { LogEntry } from './log.js';
 import type { Player } from './session.js';
+
+/** How long the pointer must sit still before fullscreen hides its furniture. */
+const IDLE_MS = 2500;
+
+/** So a returning player does not retype their name every session. */
+const STORE_NAME = 'dino.name';
+const STORE_AVATAR = 'dino.avatar';
+
+/** localStorage throws outright in a locked-down profile; a name is not worth it. */
+function remember(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* private mode, or storage disabled */
+  }
+}
+
+function recall(key: string): string {
+  try {
+    return localStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
+}
 
 function must<T extends Element>(id: string): T {
   const el = document.getElementById(id);
@@ -12,12 +45,20 @@ function must<T extends Element>(id: string): T {
   return el as unknown as T;
 }
 
+export interface Identity {
+  name: string;
+  avatar: AvatarId;
+}
+
 export interface UICallbacks {
-  onHost: () => void;
-  onJoin: (rawCode: string) => void;
+  onHost: (identity: Identity) => void;
+  onJoin: (rawCode: string, identity: Identity) => void;
   onLeave: () => void;
   onChat: (text: string) => void;
   onRomPicked: (file: File) => void;
+  onToggleMic: () => void;
+  /** Silence one player for this listener only. */
+  onPeerAudible: (peerId: PeerId, audible: boolean) => void;
 }
 
 export class UI {
@@ -41,18 +82,88 @@ export class UI {
   readonly #channelTable = must<HTMLPreElement>('channel-table');
   readonly #brokerLine = must<HTMLElement>('broker-line');
   readonly #screen = must<HTMLCanvasElement>('screen');
+  readonly #stageWrap = must<HTMLElement>('stage-wrap');
+  readonly #stage = must<HTMLElement>('stage');
+  readonly #btnFull = must<HTMLButtonElement>('btn-fullscreen');
   readonly #stageMessage = must<HTMLElement>('stage-message');
   readonly #romPicker = must<HTMLElement>('rom-picker');
   readonly #romFile = must<HTMLInputElement>('rom-file');
   readonly #hud = must<HTMLElement>('emu-hud');
   readonly #netHud = must<HTMLElement>('net-hud');
+  readonly #dialog = must<HTMLDialogElement>('identity-modal');
+  readonly #identityForm = must<HTMLFormElement>('identity-form');
+  readonly #identityTitle = must<HTMLElement>('identity-title');
+  readonly #identityError = must<HTMLElement>('identity-error');
+  readonly #identityNote = must<HTMLElement>('identity-note');
+  readonly #nameInput = must<HTMLInputElement>('input-name');
+  readonly #avatarGrid = must<HTMLElement>('avatar-grid');
+  readonly #btnIdentityGo = must<HTMLButtonElement>('btn-identity-go');
+  readonly #btnIdentityCancel = must<HTMLButtonElement>('btn-identity-cancel');
+  readonly #avatarDefs = must<SVGSVGElement>('avatar-defs');
+  readonly #voiceSinks = must<HTMLElement>('voice-sinks');
+  readonly #lobbyCount = must<HTMLElement>('lobby-count');
+  readonly #speakingBar = must<HTMLElement>('speaking');
   #shareText = '';
+  #idleTimer: number | null = null;
+  /** Which button opened the identity dialog, and so what confirming means. */
+  #pending: { role: 'host' | 'guest'; code: string } | null = null;
+  // The lobby is drawn from three sources — the roster, whether we may talk at
+  // all, and whether a toggle is in flight — and any of them can change on its
+  // own, so the last of each is kept to redraw from.
+  #players: Player[] = [];
+  #audibleFor: (peerId: PeerId) => boolean = () => true;
+  #micAvailable = false;
+  #micBusy = false;
+  #speakingIds = new Set<string>();
 
   constructor(cb: UICallbacks) {
-    this.#btnHost.addEventListener('click', () => cb.onHost());
+    this.#avatarDefs.innerHTML = avatarDefs();
+    this.#buildAvatarGrid();
+    this.#restoreIdentity();
+
+    this.#btnHost.addEventListener('click', () => this.#openIdentity('host', ''));
     this.#joinForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      cb.onJoin(this.#codeInput.value);
+      // The code is checked before the dialog opens, so a typo is reported
+      // where it was typed rather than two screens later.
+      const raw = this.#codeInput.value;
+      if (!raw.trim()) {
+        this.showError('Enter the room code the host gave you.');
+        return;
+      }
+      this.#openIdentity('guest', raw);
+    });
+
+    this.#nameInput.addEventListener('input', () => this.#syncIdentityForm());
+    this.#btnIdentityCancel.addEventListener('click', () => this.#dialog.close());
+    this.#identityForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const identity = this.identity;
+      if (!identity.name) {
+        this.#identityError.textContent = 'A name is required — the others need to know who you are.';
+        this.#nameInput.focus();
+        return;
+      }
+      const pending = this.#pending;
+      if (!pending) return;
+      remember(STORE_NAME, identity.name);
+      remember(STORE_AVATAR, identity.avatar);
+      if (pending.role === 'host') cb.onHost(identity);
+      else cb.onJoin(pending.code, identity);
+    });
+
+    // The lobby is rebuilt whole on every roster change, so its buttons cannot
+    // be bound individually — they would not survive the next render.
+    this.#roster.addEventListener('click', (e) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('#btn-mic')) {
+        cb.onToggleMic();
+        return;
+      }
+      const btn = el?.closest('button[data-peer]');
+      if (!(btn instanceof HTMLButtonElement)) return;
+      const audible = btn.getAttribute('aria-pressed') === 'true';
+      cb.onPeerAudible(btn.dataset['peer'] as PeerId, !audible);
     });
     this.#btnLeave.addEventListener('click', () => cb.onLeave());
     this.#chatForm.addEventListener('submit', (e) => {
@@ -69,6 +180,176 @@ export class UI {
       this.#btnCopy.textContent = 'copied';
       setTimeout(() => (this.#btnCopy.textContent = 'copy'), 1200);
     });
+
+    // Three ways into fullscreen, because everyone reaches for a different
+    // one. Escape on the way out is the browser's, not ours.
+    this.#btnFull.addEventListener('click', () => {
+      void this.toggleFullscreen();
+      // Without this the button keeps keyboard focus inside the fullscreen
+      // element, and the next Space or Enter aimed at the game re-toggles it.
+      this.#btnFull.blur();
+    });
+    this.#stage.addEventListener('dblclick', () => void this.toggleFullscreen());
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+      // The chat box and the name field are letters too — see isTyping.
+      if (isTyping(e.target)) return;
+      if (e.code === 'KeyF') {
+        e.preventDefault();
+        void this.toggleFullscreen();
+      } else if (e.code === 'KeyM' && !this.#room.hidden) {
+        e.preventDefault();
+        cb.onToggleMic();
+      }
+    });
+    // Covers Escape and the browser's own fullscreen affordances, which never
+    // route through toggleFullscreen().
+    document.addEventListener('fullscreenchange', () => this.#syncFullscreen());
+    this.#stageWrap.addEventListener('pointermove', () => this.#wakeChrome());
+  }
+
+  /** True while the game screen owns the display. */
+  get fullscreen(): boolean {
+    return document.fullscreenElement === this.#stageWrap;
+  }
+
+  /**
+   * Entering is refused unless there is actually a picture to enlarge --
+   * otherwise F on the landing page blacks out the monitor to show the word
+   * "waiting". Leaving is always allowed.
+   */
+  async toggleFullscreen(): Promise<void> {
+    try {
+      if (this.fullscreen) {
+        await document.exitFullscreen();
+      } else if (!this.#screen.hidden) {
+        await this.#stageWrap.requestFullscreen({ navigationUI: 'hide' });
+      }
+    } catch {
+      // A browser may refuse (no user activation, kiosk policy, a permissions
+      // policy on an embedding frame). Staying windowed is a fine outcome.
+    }
+  }
+
+  #syncFullscreen(): void {
+    const on = this.fullscreen;
+    this.#btnFull.textContent = on ? 'exit' : 'fullscreen';
+    this.#btnFull.setAttribute('aria-pressed', String(on));
+    this.#wakeChrome();
+  }
+
+  /**
+   * The pointer moved, so show the cursor, the button and the HUD again and
+   * restart the countdown to hiding them. A no-op outside fullscreen, where
+   * the page furniture is supposed to stay put.
+   */
+  #wakeChrome(): void {
+    if (this.#idleTimer !== null) clearTimeout(this.#idleTimer);
+    this.#idleTimer = null;
+    delete this.#stageWrap.dataset['idle'];
+    if (!this.fullscreen) return;
+    this.#idleTimer = window.setTimeout(() => {
+      this.#idleTimer = null;
+      this.#stageWrap.dataset['idle'] = 'true';
+    }, IDLE_MS);
+  }
+
+  // -- identity -------------------------------------------------------------
+
+  /** Ten radio inputs, one per avatar. Radios give us arrow-key selection. */
+  #buildAvatarGrid(): void {
+    this.#avatarGrid.replaceChildren(
+      ...AVATAR_IDS.map((id, i) => {
+        const label = document.createElement('label');
+        label.className = 'avatar-pick';
+        label.dataset['avatar'] = id;
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'avatar';
+        input.value = id;
+        input.checked = i === 0;
+        const name = document.createElement('span');
+        name.className = 'avatar-name';
+        name.textContent = avatarName(id);
+        label.append(input, avatarSvg(id, 'avatar-art'), name);
+        label.title = avatarName(id);
+        return label;
+      }),
+    );
+  }
+
+  #restoreIdentity(): void {
+    this.#nameInput.value = coerceName(recall(STORE_NAME));
+    this.selectAvatar(coerceAvatar(recall(STORE_AVATAR) || DEFAULT_AVATAR));
+    this.#syncIdentityForm();
+  }
+
+  /** What the dialog currently holds, cleaned the same way the wire cleans it. */
+  get identity(): Identity {
+    const checked = this.#avatarGrid.querySelector<HTMLInputElement>('input:checked');
+    return { name: coerceName(this.#nameInput.value), avatar: coerceAvatar(checked?.value) };
+  }
+
+  selectAvatar(id: AvatarId): void {
+    const input = this.#avatarGrid.querySelector<HTMLInputElement>(`input[value="${id}"]`);
+    if (input) input.checked = true;
+  }
+
+  #openIdentity(role: 'host' | 'guest', code: string): void {
+    this.#pending = { role, code };
+    this.showError('');
+    this.#identityError.textContent = '';
+    this.#identityTitle.textContent = role === 'host' ? 'WHO ARE YOU' : 'WHO IS JOINING';
+    this.#btnIdentityGo.textContent = role === 'host' ? 'HOST A GAME' : 'JOIN GAME';
+    this.#syncIdentityForm();
+    this.#dialog.showModal();
+    this.#nameInput.focus();
+    this.#nameInput.select();
+  }
+
+  #syncIdentityForm(): void {
+    const ok = this.identity.name.length > 0;
+    this.#btnIdentityGo.disabled = !ok;
+    if (ok) this.#identityError.textContent = '';
+  }
+
+  /**
+   * The permission prompt is a browser dialog with no explanation on it, so the
+   * one that caused it stays up and says what is going on until it settles.
+   */
+  showMicPending(): void {
+    this.#identityNote.textContent = 'asking for your microphone…';
+    this.#btnIdentityGo.disabled = true;
+    this.#btnIdentityCancel.disabled = true;
+  }
+
+  closeIdentity(): void {
+    this.#identityNote.innerHTML =
+      'your browser will ask for the microphone. you join <b>muted</b> — press <kbd>M</kbd> to talk.';
+    this.#btnIdentityCancel.disabled = false;
+    this.#syncIdentityForm();
+    if (this.#dialog.open) this.#dialog.close();
+    this.#pending = null;
+  }
+
+  /** Where `Voice` parks its per-peer <audio> elements. */
+  get voiceSinks(): HTMLElement {
+    return this.#voiceSinks;
+  }
+
+  /** Whether unmuting is an option at all, or the mic was refused. */
+  setMicAvailable(available: boolean): void {
+    this.#micAvailable = available;
+    this.renderRoster(this.#players, this.#audibleFor);
+  }
+
+  /**
+   * Unmuting has to go and fetch a microphone, so the control says so rather
+   * than sitting there looking unresponsive.
+   */
+  setMicBusy(busy: boolean): void {
+    this.#micBusy = busy;
+    this.renderRoster(this.#players, this.#audibleFor);
   }
 
   setBroker(description: string): void {
@@ -102,6 +383,9 @@ export class UI {
   }
 
   showLanding(): void {
+    // Leaving the room must not strand the player in a fullscreen black box.
+    if (this.fullscreen) void document.exitFullscreen().catch(() => {});
+    this.closeIdentity();
     this.#landing.hidden = false;
     this.#room.hidden = true;
     this.setBusy(false);
@@ -113,19 +397,147 @@ export class UI {
     this.#statusPill.title = detail;
   }
 
-  renderRoster(players: Player[]): void {
-    this.#roster.replaceChildren(
-      ...players.map((p) => {
-        const li = document.createElement('li');
-        li.dataset['slot'] = String(p.slot);
-        li.innerHTML =
-          `<span class="slot">P${p.slot}</span>` +
-          `<span class="who"></span>` +
-          `<span class="peer-id"></span>` +
-          (p.isSelf ? '<span class="you">you</span>' : '');
-        li.querySelector('.who')!.textContent = p.label;
-        li.querySelector('.peer-id')!.textContent = p.peerId;
-        return li;
+  /**
+   * The lobby: who is in the room and what their microphone is doing.
+   *
+   * `audibleFor` answers "can I hear this player" and is a purely local matter,
+   * so it comes from `Voice` rather than from the roster the peers agreed on.
+   */
+  renderRoster(players: Player[], audibleFor: (peerId: PeerId) => boolean = () => true): void {
+    this.#players = players;
+    this.#audibleFor = audibleFor;
+    this.#lobbyCount.textContent = players.length
+      ? `${players.length} of ${MAX_PLAYERS} players`
+      : 'waiting for players';
+    this.#roster.replaceChildren(...players.map((p) => this.#playerCard(p, audibleFor)));
+    this.renderSpeaking(this.#speakingIds);
+  }
+
+  #playerCard(p: Player, audibleFor: (peerId: PeerId) => boolean): HTMLLIElement {
+    const li = document.createElement('li');
+    li.dataset['slot'] = String(p.slot);
+    li.dataset['self'] = String(p.isSelf);
+    li.dataset['talking'] = String(!p.muted);
+    li.dataset['peer'] = p.peerId;
+    li.dataset['speaking'] = String(this.#speakingIds.has(p.isSelf ? 'self' : p.peerId));
+
+    // The portrait, and — for you — the microphone control sitting on it.
+    const portrait = document.createElement('div');
+    portrait.className = 'portrait';
+    portrait.append(avatarSvg(p.avatar, 'avatar-art portrait-art'));
+    portrait.append(p.isSelf ? this.#micOrb(p) : this.#micBadge(p));
+
+    const slot = document.createElement('span');
+    slot.className = 'slot';
+    slot.textContent = `P${p.slot}`;
+
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = p.label;
+
+    const state = document.createElement('span');
+    state.className = 'mic-state';
+    state.dataset['muted'] = String(p.muted);
+    state.textContent = p.isSelf
+      ? p.muted
+        ? 'you are muted'
+        : 'you are live'
+      : p.muted
+        ? 'muted'
+        : 'talking';
+
+    const peerId = document.createElement('span');
+    peerId.className = 'peer-id';
+    peerId.textContent = p.peerId;
+
+    const card = document.createElement('div');
+    card.className = 'card-body';
+    card.append(slot, who, state, peerId);
+
+    li.append(portrait, card);
+
+    if (p.isSelf) {
+      const you = document.createElement('span');
+      you.className = 'you';
+      you.textContent = 'you';
+      li.append(you);
+    } else {
+      // Silencing someone is between you and your speakers; nothing is sent.
+      const audible = audibleFor(p.peerId);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'small speaker';
+      btn.dataset['peer'] = p.peerId;
+      btn.setAttribute('aria-pressed', String(audible));
+      btn.textContent = audible ? 'hear' : 'silenced';
+      btn.title = `${audible ? 'Silence' : 'Un-silence'} ${p.label} for you only`;
+      li.append(btn);
+    }
+    return li;
+  }
+
+  /**
+   * Your own microphone, sitting on your own portrait. An icon rather than a
+   * word: it is a control you hit mid-fight, and it keeps the id the M hotkey
+   * and the checks both reach for.
+   */
+  #micOrb(p: Player): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btn-mic';
+    btn.className = 'mic-orb';
+    btn.disabled = !this.#micAvailable || this.#micBusy;
+    btn.setAttribute('aria-pressed', String(!p.muted));
+    btn.dataset['busy'] = String(this.#micBusy);
+    btn.dataset['state'] = !this.#micAvailable ? 'none' : p.muted ? 'muted' : 'live';
+    btn.append(micIcon(this.#micAvailable && !p.muted, !this.#micAvailable));
+    btn.title = !this.#micAvailable
+      ? 'No microphone — you can hear everyone, they cannot hear you'
+      : `${p.muted ? 'Open' : 'Close'} your microphone (M)`;
+    btn.setAttribute('aria-label', btn.title);
+    return btn;
+  }
+
+  #micBadge(p: Player): HTMLElement {
+    const badge = document.createElement('span');
+    badge.className = 'mic-badge';
+    badge.dataset['muted'] = String(p.muted);
+    badge.append(micIcon(!p.muted, false));
+    badge.title = `${p.label}'s microphone is ${p.muted ? 'closed' : 'open'}`;
+    badge.setAttribute('aria-label', badge.title);
+    return badge;
+  }
+
+  /**
+   * Who is talking, over the picture.
+   *
+   * Lives inside the stage wrapper, which is the element that goes fullscreen,
+   * so it stays visible mid-game instead of being left behind on the page.
+   */
+  renderSpeaking(speaking: Set<string>): void {
+    this.#speakingIds = speaking;
+    // Patch the lobby cards in place. This runs several times a second, and
+    // rebuilding the whole lobby at that rate would throw away the focus and
+    // the pressed state of the controls inside it every time somebody spoke.
+    for (const li of this.#roster.children) {
+      if (!(li instanceof HTMLElement)) continue;
+      const key = li.dataset['self'] === 'true' ? 'self' : (li.dataset['peer'] ?? '');
+      li.dataset['speaking'] = String(speaking.has(key));
+    }
+    const talkers = this.#players.filter(
+      (p) => speaking.has(p.isSelf ? 'self' : p.peerId),
+    );
+    this.#speakingBar.hidden = talkers.length === 0;
+    this.#speakingBar.replaceChildren(
+      ...talkers.map((p) => {
+        const chip = document.createElement('span');
+        chip.className = 'talker';
+        chip.dataset['slot'] = String(p.slot);
+        chip.append(avatarSvg(p.avatar, 'avatar-art talker-art'));
+        const name = document.createElement('b');
+        name.textContent = p.isSelf ? 'you' : p.label;
+        chip.append(name);
+        return chip;
       }),
     );
   }
@@ -167,17 +579,20 @@ export class UI {
     this.#stageMessage.textContent = message;
     this.#stageMessage.hidden = false;
     this.#screen.hidden = true;
+    this.#btnFull.hidden = true;
   }
 
   showRomPicker(show: boolean): void {
     this.#romPicker.hidden = !show;
     this.#stageMessage.hidden = show;
+    if (show) this.#btnFull.hidden = true;
   }
 
   showScreen(): void {
     this.#screen.hidden = false;
     this.#stageMessage.hidden = true;
     this.#romPicker.hidden = true;
+    this.#btnFull.hidden = false;
   }
 
   setNetStatus(phase: string, detail: string): void {
@@ -277,6 +692,39 @@ export class UI {
     ]);
     this.#channelTable.textContent = formatTable([header, ...body]);
   }
+}
+
+/**
+ * A microphone, or a microphone with a stroke through it. Inline SVG for the
+ * same reason as the avatars: nothing to fetch, and it takes its colour from
+ * whatever it sits in.
+ */
+function micIcon(open: boolean, absent: boolean): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'mic-icon');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+
+  const body = document.createElementNS(NS, 'path');
+  body.setAttribute('fill', 'currentColor');
+  body.setAttribute(
+    'd',
+    'M12 3a3 3 0 013 3v6a3 3 0 01-6 0V6a3 3 0 013-3zm7 9a7 7 0 01-6 6.93V22h-2v-3.07' +
+      'A7 7 0 015 12h2a5 5 0 0010 0z',
+  );
+  svg.append(body);
+
+  if (!open) {
+    const slash = document.createElementNS(NS, 'path');
+    slash.setAttribute('stroke', 'currentColor');
+    slash.setAttribute('stroke-width', absent ? '2.4' : '2');
+    slash.setAttribute('stroke-linecap', 'round');
+    slash.setAttribute('d', 'M4 3.5 L20 20.5');
+    svg.append(slash);
+  }
+  return svg;
 }
 
 function field(label: string, value: string): HTMLElement {

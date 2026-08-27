@@ -3,7 +3,7 @@ import type { BrokerConfig } from '@dino/shared';
 /**
  * Every knob that decides *where* signalling happens lives here and comes from
  * the environment. Gotcha #4: the public PeerJS broker is rate limited and
- * periodically unreliable, so pointing at a self-hosted `npx peerjs` has to be
+ * periodically unreliable, so pointing at a self-hosted `yarn dlx peerjs` has to be
  * a config change and never a code change.
  *
  * With nothing set, PeerJS uses its own cloud defaults (0.peerjs.com:443/).

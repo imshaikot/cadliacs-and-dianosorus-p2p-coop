@@ -11,6 +11,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
+import { hostGame } from './app.mjs';
 import { KEYS, bit } from './keys.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
@@ -43,7 +44,7 @@ let failure = null;
 
 try {
   const host = await Tab.create(conn, APP, 'HOST');
-  await host.clickSelector('#btn-host');
+  await hostGame(host, { name: 'Jack Tenrec', avatar: 'raptor' });
 
   const boot = await host.waitFor(
     'window.__dino.snapshot().emulator?.running && window.__dino.snapshot()',
