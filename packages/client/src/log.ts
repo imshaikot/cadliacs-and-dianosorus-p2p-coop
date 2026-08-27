@@ -40,8 +40,8 @@ export class Log {
     const entry: LogEntry = detail === undefined ? { at: Date.now(), level, message } : { at: Date.now(), level, message, detail };
     this.entries.push(entry);
     const consoleFn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.info;
-    if (detail === undefined) consoleFn(`[dino] ${message}`);
-    else consoleFn(`[dino] ${message}`, detail);
+    if (detail === undefined) consoleFn(`[retro] ${message}`);
+    else consoleFn(`[retro] ${message}`, detail);
     for (const sink of this.#sinks) sink(entry);
   }
 }

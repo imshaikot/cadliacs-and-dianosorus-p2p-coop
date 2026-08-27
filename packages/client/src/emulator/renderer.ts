@@ -96,7 +96,7 @@ for (let i = 0; i < 32; i += 1) {
 }
 for (let i = 0; i < 64; i += 1) G6[i] = (((i << 2) | (i >> 4)) & 0xff) << 8;
 
-/** Not used by dino, which negotiates XRGB8888, but cheap to keep correct. */
+/** Not used by CPS-1/2, which negotiate XRGB8888, but cheap to keep correct. */
 function convertRgb565(frame: VideoFrame, out: Uint32Array): void {
   const src = new Uint16Array(
     frame.pixels.buffer,

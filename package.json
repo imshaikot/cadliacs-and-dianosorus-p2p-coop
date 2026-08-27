@@ -23,7 +23,7 @@
     "verify:m6": "node tools/verify/verify-m6.mjs",
     "verify:fullscreen": "node tools/verify/verify-fullscreen.mjs",
     "verify": "yarn verify:m0 && yarn verify:m1 && yarn verify:m2 && yarn verify:m3 && yarn verify:m4 && yarn verify:m6 && yarn verify:fullscreen",
-    "verify:prod": "node tools/verify/verify-prod.mjs",
+    "verify:prod": "node --env-file-if-exists=.env tools/verify/verify-prod.mjs",
     "deploy": "bash scripts/deploy.sh"
   },
   "devDependencies": {

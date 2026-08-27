@@ -57,7 +57,7 @@ export class FbneoCore {
    * FBNeo sets `need_fullpath` and `block_extract`, so it will not accept a
    * buffer — it wants a path and opens the zip itself. We hand it one inside
    * the Emscripten in-memory filesystem. Nothing touches the network, and the
-   * driver is chosen purely from the basename: dino.zip -> driver `dino`.
+   * driver is chosen purely from the basename: sf2.zip -> driver `sf2`.
    */
   loadRom(fileName: string, bytes: Uint8Array): void {
     if (this.#loaded) throw new Error('a ROM is already loaded');

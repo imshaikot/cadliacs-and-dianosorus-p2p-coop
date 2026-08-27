@@ -40,7 +40,7 @@ function readNumber(value: unknown, name: string): number | undefined {
   if (raw === undefined) return undefined;
   const n = Number(raw);
   if (!Number.isFinite(n)) {
-    console.warn(`[dino] ${name}="${raw}" is not a number, ignoring`);
+    console.warn(`[retro] ${name}="${raw}" is not a number, ignoring`);
     return undefined;
   }
   return n;
@@ -51,7 +51,7 @@ function readBoolean(value: unknown, name: string): boolean | undefined {
   if (raw === undefined) return undefined;
   if (raw === 'true' || raw === '1' || raw === 'yes') return true;
   if (raw === 'false' || raw === '0' || raw === 'no') return false;
-  console.warn(`[dino] ${name}="${raw}" is not a boolean, ignoring`);
+  console.warn(`[retro] ${name}="${raw}" is not a boolean, ignoring`);
   return undefined;
 }
 
@@ -68,7 +68,7 @@ function readIceServers(value: unknown): RTCIceServer[] | undefined {
     if (!Array.isArray(parsed)) throw new Error('expected a JSON array');
     return parsed as RTCIceServer[];
   } catch (err) {
-    console.warn('[dino] VITE_ICE_SERVERS is not valid JSON, falling back to PeerJS defaults:', err);
+    console.warn('[retro] VITE_ICE_SERVERS is not valid JSON, falling back to PeerJS defaults:', err);
     return undefined;
   }
 }

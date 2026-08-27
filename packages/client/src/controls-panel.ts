@@ -33,17 +33,22 @@ function must<T extends Element>(id: string): T {
 const AXIS_NAMES = ['L-X', 'L-Y', 'R-X', 'R-Y'];
 
 /**
- * Reading order for the legend: stick, then buttons, then the cabinet's coin
- * and start. BUTTON_NAMES is in libretro id order, which puts ATTACK and COIN
- * above UP — right for a wire protocol, wrong for something a person reads.
+ * Reading order for the legend: stick, then the six-button cluster in its own
+ * physical order, then the cabinet's coin and start. BUTTON_NAMES is in libretro
+ * id order, which scatters the cluster and puts COIN above UP — right for a wire
+ * protocol, wrong for something a person reads.
  */
 const DISPLAY_ORDER: readonly ButtonName[] = [
   'UP',
   'DOWN',
   'LEFT',
   'RIGHT',
-  'ATTACK',
-  'JUMP',
+  'B1',
+  'B2',
+  'B3',
+  'B4',
+  'B5',
+  'B6',
   'COIN',
   'START',
 ];

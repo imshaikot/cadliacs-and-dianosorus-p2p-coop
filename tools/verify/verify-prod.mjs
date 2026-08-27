@@ -11,7 +11,10 @@ import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
 import { hostGame, joinGame } from './app.mjs';
 
 const APP = process.env.APP_URL ?? 'http://localhost:4173/';
-const ROM = process.env.ROM_PATH ?? '/Users/shahriar/Workspace/multi-deno/roms/dino.zip';
+// Whatever `.env` points the dev server at, so both harnesses use one game file.
+const ROM =
+  process.env.ROM_PATH ??
+  new URL(`../../roms/${process.env.VITE_ROM_FILE ?? 'game.zip'}`, import.meta.url).pathname;
 const OUT = new URL('./shots/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
 

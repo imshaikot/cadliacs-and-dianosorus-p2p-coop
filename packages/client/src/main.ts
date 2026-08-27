@@ -55,7 +55,7 @@ const ui = new UI({
       .then((rom) => startEmulation(rom))
       .catch((err) => {
         log.error('that file will not do', { message: err instanceof Error ? err.message : String(err) });
-        ui.showStageMessage('That is not a zip archive. Pick your dino.zip.');
+        ui.showStageMessage('That is not a zip archive. Pick your game\u2019s .zip file.');
         ui.showRomPicker(true);
       });
   },

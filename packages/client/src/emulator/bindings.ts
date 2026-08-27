@@ -2,10 +2,10 @@
  * What a physical control *is*, independent of what it does.
  *
  * A binding is one source: a keyboard key, a gamepad button, or one direction
- * of one gamepad axis. Every game button holds a list of them, so ATTACK can be
- * Z *and* the pad's A button at the same time without either knowing about the
- * other — which is what lets someone plug a stick in mid-session and keep the
- * keyboard as a fallback.
+ * of one gamepad axis. Every game button holds a list of them, so B4 can be Z
+ * *and* J *and* the pad's A button at the same time without any of them knowing
+ * about the others — which is what lets someone plug a stick in mid-session and
+ * keep the keyboard as a fallback.
  *
  * Axis bindings carry a direction rather than a threshold. The threshold is the
  * profile's deadzone, shared by every axis, because a stick that needs a
@@ -59,8 +59,12 @@ export const BUTTON_GLYPH: Readonly<Record<ButtonName, string>> = {
   DOWN: '↓',
   LEFT: '←',
   RIGHT: '→',
-  ATTACK: '✕',
-  JUMP: '⬆',
+  B1: '①',
+  B2: '②',
+  B3: '③',
+  B4: '④',
+  B5: '⑤',
+  B6: '⑥',
   COIN: '◎',
   START: '▶',
 };
@@ -70,8 +74,9 @@ export const BUTTON_GLYPH: Readonly<Record<ButtonName, string>> = {
  *
  * The keyboard half is derived from DEFAULT_KEYMAP rather than restated, so the
  * arcade conventions (5 coins, 1 starts) have exactly one home. The pad half is
- * the standard mapping's d-pad and left stick, with attack on A and jump on B
- * because that is the order a thumb finds them in.
+ * the standard mapping's d-pad and left stick, plus the six-button cluster laid
+ * onto the pad the way every fighting game does it: face buttons for the bottom
+ * row a thumb reaches first, shoulders for the top.
  */
 function defaultBindings(): Bindings {
   const out = {} as Record<ButtonName, Binding[]>;
@@ -84,8 +89,12 @@ function defaultBindings(): Bindings {
     DOWN: [{ source: 'pad-button', index: 13 }, { source: 'pad-axis', index: 1, dir: 1 }],
     LEFT: [{ source: 'pad-button', index: 14 }, { source: 'pad-axis', index: 0, dir: -1 }],
     RIGHT: [{ source: 'pad-button', index: 15 }, { source: 'pad-axis', index: 0, dir: 1 }],
-    ATTACK: [{ source: 'pad-button', index: 0 }],
-    JUMP: [{ source: 'pad-button', index: 1 }],
+    B1: [{ source: 'pad-button', index: 2 }],
+    B2: [{ source: 'pad-button', index: 3 }],
+    B3: [{ source: 'pad-button', index: 5 }],
+    B4: [{ source: 'pad-button', index: 0 }],
+    B5: [{ source: 'pad-button', index: 1 }],
+    B6: [{ source: 'pad-button', index: 4 }],
     COIN: [{ source: 'pad-button', index: 8 }],
     START: [{ source: 'pad-button', index: 9 }],
   };
@@ -192,7 +201,7 @@ function describeKey(code: string): string {
 
 // -- persistence -----------------------------------------------------------
 
-const STORAGE_KEY = 'dino.controls.v1';
+const STORAGE_KEY = 'retro.controls.v1';
 
 interface StoredProfile {
   bindings?: Record<string, unknown>;

@@ -105,14 +105,14 @@ try {
   await g1.keyEvent('rawKeyDown', KEYS.LEFT);
   await g2.keyEvent('rawKeyDown', KEYS.UP);
   await sleep(1500);
-  await host.keyEvent('rawKeyDown', KEYS.ATTACK);
-  await g2.keyEvent('rawKeyDown', KEYS.JUMP);
+  await host.keyEvent('rawKeyDown', KEYS.B4);
+  await g2.keyEvent('rawKeyDown', KEYS.B5);
   await sleep(1500);
   await host.keyEvent('keyUp', KEYS.RIGHT);
-  await host.keyEvent('keyUp', KEYS.ATTACK);
+  await host.keyEvent('keyUp', KEYS.B4);
   await g1.keyEvent('keyUp', KEYS.LEFT);
   await g2.keyEvent('keyUp', KEYS.UP);
-  await g2.keyEvent('keyUp', KEYS.JUMP);
+  await g2.keyEvent('keyUp', KEYS.B5);
   await sleep(2000);
 
   const latches = {

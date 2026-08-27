@@ -3,7 +3,7 @@
  *
  * Nothing here fetches from the internet, and there is no code path that could.
  * In development Vite already serves files from the repo root over `/@fs`, so
- * the `roms/dino.zip` the project brief asks for is readable with no plugin and
+ * whatever you name in VITE_ROM_FILE is readable from `roms/` with no plugin and
  * no copy. A production build has no such path, so the user picks the file.
  */
 
@@ -28,7 +28,7 @@ export async function loadRomFromDevServer(): Promise<RomSource | null> {
     if (!res.ok) return null;
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (!looksLikeZip(bytes)) return null;
-    return { name: url.split('/').pop() ?? 'dino.zip', bytes, origin: 'dev-server' };
+    return { name: url.split('/').pop() ?? 'game.zip', bytes, origin: 'dev-server' };
   } catch {
     return null;
   }

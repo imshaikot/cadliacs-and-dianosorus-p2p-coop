@@ -1,6 +1,6 @@
 /**
  * M1 acceptance, driven for real:
- *   the host page loads the FBNeo WASM core and roms/dino.zip and runs at full
+ *   the host page loads the FBNeo WASM core and the dev-server ROM, runs at full
  *   speed; attract mode renders; coin + start works; player 1 is
  *   keyboard-controllable.
  *
@@ -57,8 +57,8 @@ try {
   check('core reports its real audio rate', Math.abs(emu.sampleRate - 48002.15) < 0.5, `${emu.sampleRate} Hz`);
 
   const romLog = host.console.find((c) => /ROM loaded/.test(c.text));
-  check('ROM came from roms/dino.zip via the dev server', /from: dev-server/.test(romLog?.text ?? ''), romLog?.text ?? 'not logged');
-  check('FBNeo identified the romset', host.console.some((c) => /Cadillacs and Dinosaurs \(World 930201\)/.test(c.text)));
+  check('ROM came from roms/ via the dev server', /from: dev-server/.test(romLog?.text ?? ''), romLog?.text ?? 'not logged');
+  check('FBNeo identified the romset', host.console.some((c) => /Romset description:/.test(c.text)));
 
   // --- runs at full speed --------------------------------------------------
   await sleep(1500); // let it settle past the boot spike
@@ -176,7 +176,7 @@ try {
     `idle=${divergence.idleFromAttract} coin+start=${divergence.startedFromAttract}`);
   check('holding RIGHT diverges from idle', divergence.withRight !== divergence.a1,
     `idle=${divergence.a1} right=${divergence.withRight}`);
-  check('tapping ATTACK diverges from idle', divergence.withAttack !== divergence.a1,
+  check('tapping a button diverges from idle', divergence.withAttack !== divergence.a1,
     `idle=${divergence.a1} attack=${divergence.withAttack}`);
 
   // --- live, through the real keyboard, and photograph it ------------------

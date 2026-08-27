@@ -19,8 +19,8 @@ import type { Player } from './session.js';
 const IDLE_MS = 2500;
 
 /** So a returning player does not retype their name every session. */
-const STORE_NAME = 'dino.name';
-const STORE_AVATAR = 'dino.avatar';
+const STORE_NAME = 'retro.name';
+const STORE_AVATAR = 'retro.avatar';
 
 /** localStorage throws outright in a locked-down profile; a name is not worth it. */
 function remember(key: string, value: string): void {

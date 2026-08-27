@@ -140,13 +140,13 @@ try {
   await host.keyEvent('rawKeyDown', KEYS.RIGHT);
   await guest.keyEvent('rawKeyDown', KEYS.LEFT);
   await sleep(1200);
-  await host.keyEvent('rawKeyDown', KEYS.ATTACK);
-  await guest.keyEvent('rawKeyDown', KEYS.JUMP);
+  await host.keyEvent('rawKeyDown', KEYS.B4);
+  await guest.keyEvent('rawKeyDown', KEYS.B5);
   await sleep(1200);
   await host.keyEvent('keyUp', KEYS.RIGHT);
-  await host.keyEvent('keyUp', KEYS.ATTACK);
+  await host.keyEvent('keyUp', KEYS.B4);
   await guest.keyEvent('keyUp', KEYS.LEFT);
-  await guest.keyEvent('keyUp', KEYS.JUMP);
+  await guest.keyEvent('keyUp', KEYS.B5);
   await sleep(1500);
 
   const bothHost = await host.eval(SCREEN);
