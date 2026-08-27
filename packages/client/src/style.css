@@ -759,11 +759,27 @@ input:focus {
   text-align: center;
   color: var(--dim);
   padding: var(--pad);
+  background: var(--board);
+  border: 1px solid var(--rule);
+}
+.rom-picker { max-width: min(52ch, 100%); }
+.rom-picker p { margin: 0 0 var(--cell); }
+.rom-picker code { color: var(--hot); }
+/* The why rides on the upload control itself rather than floating above it, so
+   the answer is where the question gets asked. The romset name stays lit: it is
+   the searchable term, and the only part of this worth carrying away. */
+.rom-bar {
+  display: grid;
+  gap: calc(var(--cell) / 2);
+  padding: var(--cell);
+  text-align: left;
+  /* Darker than the box around it, not lighter: --faint on --rail measured
+     2.59:1, and this caption is 11px. --dim on --void is 5.37:1. */
   background: var(--void);
   border: 1px solid var(--rule);
 }
-.rom-picker p { margin: 0 0 var(--cell); }
-.rom-picker code { color: var(--hot); }
+.rom-why { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.6; }
+.rom-picker .rom-why code { color: var(--lit); }
 .rom-picker input { letter-spacing: normal; font-size: 12px; }
 
 .hud {
