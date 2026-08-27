@@ -82,45 +82,14 @@ export class InputLatch {
   }
 }
 
-/** Binds a keymap to a latch. Returns a teardown function. */
-export function bindKeyboard(
-  latch: InputLatch,
-  target: Window | HTMLElement = window,
-  keymap: Readonly<Record<string, ButtonName>> = DEFAULT_KEYMAP,
-): () => void {
-  const onDown = (e: Event): void => {
-    if (isTyping(e.target)) return;
-    const key = (e as KeyboardEvent).code;
-    const button = keymap[key];
-    if (!button) return;
-    e.preventDefault();
-    if ((e as KeyboardEvent).repeat) return;
-    latch.press(bit(button));
-  };
-  const onUp = (e: Event): void => {
-    if (isTyping(e.target)) return;
-    const button = keymap[(e as KeyboardEvent).code];
-    if (!button) return;
-    e.preventDefault();
-    latch.release(bit(button));
-  };
-  const onBlur = (): void => latch.clear();
-
-  target.addEventListener('keydown', onDown);
-  target.addEventListener('keyup', onUp);
-  window.addEventListener('blur', onBlur);
-  return () => {
-    target.removeEventListener('keydown', onDown);
-    target.removeEventListener('keyup', onUp);
-    window.removeEventListener('blur', onBlur);
-  };
-}
-
 /**
  * The keymap claims W/A/S/D/Z/X/1/5, which are also just letters. Without this
  * the chat box would be unusable the moment the emulator is running.
+ *
+ * Exported because every other page-level hotkey owes the chat box the same
+ * courtesy -- see the fullscreen binding in `ui.ts`.
  */
-function isTyping(target: EventTarget | null): boolean {
+export function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
