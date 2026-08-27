@@ -9,22 +9,26 @@
     "packages/client"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @dino/client",
-    "build": "npm run build --workspace @dino/client",
-    "preview": "npm run preview --workspace @dino/client",
+    "dev": "yarn workspace @dino/client dev",
+    "build": "yarn workspace @dino/client build",
+    "preview": "yarn workspace @dino/client preview",
     "typecheck": "tsc --noEmit",
     "lint:layering": "node scripts/check-layering.mjs",
-    "check": "npm run typecheck && npm run lint:layering",
+    "check": "yarn typecheck && yarn lint:layering",
     "verify:m0": "node tools/verify/verify-m0.mjs",
     "verify:m1": "node tools/verify/verify-m1.mjs",
     "verify:m2": "node tools/verify/verify-m2.mjs",
     "verify:m3": "node tools/verify/verify-m3.mjs",
     "verify:m4": "node tools/verify/verify-m4.mjs",
-    "verify": "npm run verify:m0 && npm run verify:m1 && npm run verify:m2 && npm run verify:m3 && npm run verify:m4",
-    "verify:prod": "node tools/verify/verify-prod.mjs"
+    "verify:m6": "node tools/verify/verify-m6.mjs",
+    "verify:fullscreen": "node tools/verify/verify-fullscreen.mjs",
+    "verify": "yarn verify:m0 && yarn verify:m1 && yarn verify:m2 && yarn verify:m3 && yarn verify:m4 && yarn verify:m6 && yarn verify:fullscreen",
+    "verify:prod": "node tools/verify/verify-prod.mjs",
+    "deploy": "bash scripts/deploy.sh"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
-  }
+  },
+  "packageManager": "yarn@4.18.0"
 }

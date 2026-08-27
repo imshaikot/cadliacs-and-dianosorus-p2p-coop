@@ -1,5 +1,14 @@
 node_modules/
 dist/
+
+# Yarn keeps its cache and unplugged deps here; the lockfile is committed.
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+.pnp.*
+
+# Worktree for the deploy branch, created by scripts/deploy.sh.
+.deploy/
 .env
 .env.local
 *.log
