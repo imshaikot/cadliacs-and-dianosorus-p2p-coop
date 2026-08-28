@@ -9,9 +9,9 @@
     "packages/client"
   ],
   "scripts": {
-    "dev": "yarn workspace @dino/client dev",
-    "build": "yarn workspace @dino/client build",
-    "preview": "yarn workspace @dino/client preview",
+    "dev": "yarn workspace @retro/client dev",
+    "build": "yarn workspace @retro/client build",
+    "preview": "yarn workspace @retro/client preview",
     "typecheck": "tsc --noEmit",
     "lint:layering": "node scripts/check-layering.mjs",
     "check": "yarn typecheck && yarn lint:layering",
