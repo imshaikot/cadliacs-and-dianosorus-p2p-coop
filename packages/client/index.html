@@ -4,91 +4,112 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Retro P2P — arcade co-op in your browser</title>
-    <link rel="icon" href="data:," />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23060a13'/%3E%3Ccircle cx='8' cy='8' r='5.5' fill='%23ffc83d'/%3E%3Crect x='7' y='4.5' width='2' height='7' fill='%23060a13'/%3E%3C/svg%3E"
+    />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
     <!--
-      The page is a cabinet, read top to bottom the way you stand in front of
-      one: lit marquee, screen in its bezel, control panel, coin door. Every
-      section below is one of those parts and the stylesheet is ordered to match.
+      The page is a machine in a dark room: one glowing tube (the hero on the
+      landing page, the game screen once you are in a room) and quiet blue
+      hardware around it. The wordmark is a hand-drawn pixel path — no webfont
+      to fetch, and it scales crisp at any size.
     -->
-    <main class="cab">
+    <svg style="display: none" aria-hidden="true" focusable="false">
+      <defs>
+        <path id="px-retro" d="M0 0h4v1h-4zM6 0h5v1h-5zM12 0h5v1h-5zM18 0h4v1h-4zM25 0h3v1h-3zM0 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM14 1h1v1h-1zM18 1h1v1h-1zM22 1h1v1h-1zM24 1h1v1h-1zM28 1h1v1h-1zM0 2h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM14 2h1v1h-1zM18 2h1v1h-1zM22 2h1v1h-1zM24 2h1v1h-1zM28 2h1v1h-1zM0 3h4v1h-4zM6 3h4v1h-4zM14 3h1v1h-1zM18 3h4v1h-4zM24 3h1v1h-1zM28 3h1v1h-1zM0 4h1v1h-1zM2 4h1v1h-1zM6 4h1v1h-1zM14 4h1v1h-1zM18 4h1v1h-1zM20 4h1v1h-1zM24 4h1v1h-1zM28 4h1v1h-1zM0 5h1v1h-1zM3 5h1v1h-1zM6 5h1v1h-1zM14 5h1v1h-1zM18 5h1v1h-1zM21 5h1v1h-1zM24 5h1v1h-1zM28 5h1v1h-1zM0 6h1v1h-1zM4 6h1v1h-1zM6 6h5v1h-5zM14 6h1v1h-1zM18 6h1v1h-1zM22 6h1v1h-1zM25 6h3v1h-3z"/>
+        <path id="px-p2p" d="M0 0h4v1h-4zM7 0h3v1h-3zM12 0h4v1h-4zM0 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM10 1h1v1h-1zM12 1h1v1h-1zM16 1h1v1h-1zM0 2h1v1h-1zM4 2h1v1h-1zM10 2h1v1h-1zM12 2h1v1h-1zM16 2h1v1h-1zM0 3h4v1h-4zM8 3h2v1h-2zM12 3h4v1h-4zM0 4h1v1h-1zM7 4h1v1h-1zM12 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM12 5h1v1h-1zM0 6h1v1h-1zM6 6h5v1h-5zM12 6h1v1h-1z"/>
+      </defs>
+    </svg>
+
+    <main class="shell">
       <!--
-        The marquee is backlit, so it is the one genuinely bright thing here and
-        everything else sits in its spill. The broker line rides on it because
-        that is where a cabinet puts what it knows about itself.
+        Slim header for the room and author views. The landing page hides it —
+        there the wordmark leads the hero instead. Browsers without :has()
+        simply show it everywhere, which is harmless duplication.
       -->
-      <header class="marquee">
-        <div class="marquee-tube" aria-hidden="true"></div>
-        <h1 class="wordmark">
-          <span class="wordmark-main">Retro</span>
-          <span class="wordmark-sub">P2P</span>
-        </h1>
-        <p class="tagline">Arcade co-op in your browser · inputs travel, pixels do not</p>
-        <p class="broker" id="broker-line"></p>
+      <header class="masthead">
+        <a class="mark" href="#/" aria-label="Retro P2P — home">
+          <svg class="px" viewBox="0 0 29 7" aria-hidden="true"><use href="#px-retro" /></svg>
+          <span class="mark-chip"><svg class="px" viewBox="0 0 17 7" aria-hidden="true"><use href="#px-p2p" /></svg></span>
+        </a>
+        <p class="mast-tag">inputs travel · pixels don't</p>
       </header>
 
       <!--
         Gotcha #6: an AudioContext will not start without a user gesture, and
-        remote voice needs one to play with sound. Clicking one of these two
-        buttons is that gesture, which is why nothing at all happens on page
-        load. Sticky activation does not expire, so the identity dialog in
-        between costs us nothing.
+        remote voice needs one to play with sound. Confirming the identity
+        dialog is that gesture — which is why a join link can open the dialog
+        on load but never joins by itself.
       -->
-      <section class="panel coin-door" id="view-landing">
-        <p class="attract">Insert coin</p>
+      <section class="hero" id="view-landing">
+        <div class="crt">
+          <div class="crt-glass" aria-hidden="true"></div>
+          <p class="attract">insert coin</p>
+          <h1 class="wordmark">
+            <svg class="px" viewBox="0 0 29 7" role="img" aria-label="RETRO"><use href="#px-retro" /></svg>
+            <span class="wordmark-chip"><svg class="px" viewBox="0 0 17 7" role="img" aria-label="P2P"><use href="#px-p2p" /></svg></span>
+          </h1>
+          <p class="lede">
+            Arcade classics, played together in the browser. Every player runs
+            the same game, frame for frame — only your inputs cross the wire.
+          </p>
 
-        <div class="door-grid">
-          <div class="door-card">
-            <h2>Start a room</h2>
-            <p class="hint">You get a room code. Hand it to a friend.</p>
-            <button class="btn btn-primary" id="btn-host" type="button">Host a game</button>
+          <div class="start-row">
+            <button class="btn btn-coin" id="btn-host" type="button">Start a room</button>
+            <p class="start-hint">You get a code and a link to hand your friends.</p>
           </div>
-          <form class="door-card" id="join-form">
-            <h2>Join a room</h2>
-            <p class="hint">Type the code a friend gave you.</p>
+
+          <form class="join-row" id="join-form">
+            <label class="join-label" for="input-code">Have a code?</label>
             <input
               id="input-code"
               name="code"
-              placeholder="ROOM CODE"
+              placeholder="XXXX-XXXX-XXXX"
               autocomplete="off"
               autocapitalize="characters"
               spellcheck="false"
               maxlength="20"
             />
-            <button class="btn" id="btn-join" type="submit">Join</button>
+            <button class="btn btn-ghost" id="btn-join" type="submit">Join</button>
           </form>
         </div>
 
         <p class="error" id="landing-error" role="alert"></p>
 
-        <!-- The plate riveted to the back of a cabinet: what the hardware is. -->
-        <dl class="plate">
-          <div><dt>System</dt><dd>CPS-1 / CPS-2</dd></div>
-          <div><dt>Frame</dt><dd>59.63 Hz</dd></div>
-          <div><dt>Audio</dt><dd>48002.15 Hz</dd></div>
-          <div><dt>Sync</dt><dd>Lockstep</dd></div>
-        </dl>
+        <!-- The engineer's plaque: exact numbers, quietly stated. -->
+        <ul class="spec">
+          <li>CPS-1 / CPS-2</li>
+          <li>59.63 Hz native</li>
+          <li>deterministic lockstep</li>
+          <li>P2P mesh</li>
+          <li>voice chat</li>
+          <li>zero servers</li>
+        </ul>
       </section>
 
       <!--
-        Both HOST and JOIN come through here. A name is mandatory, so the
-        confirm button stays disabled until there is one; the avatar grid is
-        radio inputs so keyboard and screen-reader behaviour come for free.
-        <dialog> needs no user activation to open and gives us focus trapping
-        and Escape-to-cancel without any code.
+        Both START and JOIN come through here, and so does a shared join link. A
+        name is mandatory, so the confirm button stays disabled until there is
+        one; the avatar grid is radio inputs so keyboard and screen-reader
+        behaviour come for free. <dialog> needs no user activation to open and
+        gives us focus trapping and Escape-to-cancel without any code.
       -->
       <dialog class="identity" id="identity-modal">
         <form method="dialog" id="identity-form">
-          <h2 id="identity-title">Who are you</h2>
+          <header class="identity-head">
+            <p class="eyebrow">player setup</p>
+            <h2 id="identity-title">Who are you?</h2>
+          </header>
 
           <div class="identity-body">
             <label class="field" for="input-name">Your name</label>
             <input
               id="input-name"
               name="name"
-              placeholder="ENTER YOUR NAME"
+              placeholder="what the others will see"
               autocomplete="nickname"
               spellcheck="false"
               maxlength="16"
@@ -116,23 +137,23 @@
             <p class="error" id="identity-error" role="alert"></p>
 
             <menu>
-              <button type="button" class="btn btn-quiet" id="btn-identity-cancel">cancel</button>
-              <button type="submit" class="btn btn-primary" id="btn-identity-go">Host a game</button>
+              <button type="button" class="btn btn-ghost" id="btn-identity-cancel">cancel</button>
+              <button type="submit" class="btn btn-coin" id="btn-identity-go">Start the room</button>
             </menu>
           </div>
         </form>
       </dialog>
 
-      <section class="panel" id="view-room" hidden>
+      <section class="panel room" id="view-room" hidden>
         <div class="room-head">
           <div class="code-block">
             <span class="code-label" id="code-label">Room code</span>
             <code class="code" id="room-code">--------</code>
-            <button id="btn-copy" type="button" class="btn btn-quiet">copy</button>
+            <button id="btn-copy" type="button" class="btn btn-ghost btn-small">copy</button>
           </div>
           <div class="status-block">
             <span class="pill" id="status-pill">idle</span>
-            <button id="btn-leave" type="button" class="btn btn-quiet">leave</button>
+            <button id="btn-leave" type="button" class="btn btn-ghost btn-small">leave</button>
           </div>
         </div>
 
@@ -161,21 +182,26 @@
             <p class="stage-placeholder" id="stage-message">waiting</p>
             <!--
               The one place a player is blocked by something this page cannot
-              hand them, so it is the one place worth saying why.
+              hand them, so it is the one place worth saying why. Only the host
+              gets a file input — a guest is sent the host's copy instead, so
+              its half of this panel is a waiting line, not a picker.
             -->
             <div class="rom-picker" id="rom-picker" hidden>
-              <p>Load a game to start the emulator.</p>
-              <div class="rom-bar">
+              <p id="rom-picker-lead">Load a game to start the emulator.</p>
+              <div class="rom-bar" id="rom-bar">
                 <input type="file" id="rom-file" accept=".zip,application/zip" />
                 <p class="rom-why">
                   This player ships no games. Load a CPS-1 or CPS-2 romset zip you
-                  are entitled to use — the driver is read from the filename. If
-                  someone in the room already has one, it will be sent to you.
+                  are entitled to use — the driver is read from the filename.
                 </p>
-                <p class="rom-progress" id="rom-progress" hidden aria-live="polite"></p>
               </div>
+              <p class="rom-wait" id="rom-wait" hidden>
+                The host picks the game and it is sent to you automatically —
+                nothing to do on your side.
+              </p>
+              <p class="rom-progress" id="rom-progress" hidden aria-live="polite"></p>
             </div>
-            <button class="btn btn-quiet stage-btn" id="btn-fullscreen" type="button" hidden
+            <button class="btn btn-ghost btn-small stage-btn" id="btn-fullscreen" type="button" hidden
                     title="Fullscreen (F, or double-click the screen)"
                     aria-pressed="false">fullscreen</button>
           </div>
@@ -201,58 +227,94 @@
         </div>
 
         <form class="chat" id="chat-form">
-          <input id="chat-input" placeholder="type a message to test the control channel" autocomplete="off" />
-          <button type="submit" class="btn btn-quiet">send</button>
+          <input id="chat-input" placeholder="say something to the room" autocomplete="off" />
+          <button type="submit" class="btn btn-ghost btn-small">send</button>
         </form>
         <ol class="chat-log" id="chat-log"></ol>
+      </section>
+
+      <!-- Reached from the footer, or from #/author directly. -->
+      <section class="panel author" id="view-author" hidden>
+        <p class="eyebrow">behind the machine</p>
+        <h2 class="author-name">Shahriar M Abu Hena</h2>
+        <p class="author-line">Software engineer at Mollie, in Amsterdam.</p>
+        <p class="author-story">
+          This is a weekend machine built to settle one question: can three
+          browsers run the same arcade game so precisely in step that nobody can
+          tell whose machine is "the real one"? No servers, no video streams —
+          every player's browser simulates every frame, and only controller
+          inputs travel between them.
+        </p>
+        <ul class="author-links">
+          <li><a href="https://github.com/imshaikot" rel="noopener">GitHub — imshaikot</a></li>
+          <li><a href="https://www.linkedin.com/in/imshaikot/" rel="noopener">LinkedIn — imshaikot</a></li>
+          <li><a href="mailto:mail2shariar@gmail.com">mail2shariar@gmail.com</a></li>
+          <li><a href="https://github.com/imshaikot/retro-games-p2p-multiplayer-coop" rel="noopener">Source for this player</a></li>
+        </ul>
+        <a class="btn btn-ghost" href="#/">Back to the arcade</a>
       </section>
 
       <!--
         The control panel, deliberately outside #view-room: someone should be
         able to set a stick up and calibrate it before they join anything, and
-        still watch the legend light up while they play.
+        still watch the legend light up while they play. Collapsed by default —
+        the summary line still shows which player you drive and whether a
+        gamepad has been seen.
       -->
       <section class="panel controls" id="view-controls">
-        <div class="controls-head">
-          <h2>Control panel</h2>
-          <span class="controls-who" id="controls-who">not in a room</span>
-          <span class="pad-pill" id="pad-pill" data-state="none">no gamepad</span>
-          <button class="btn btn-quiet" id="btn-controls-reset" type="button">defaults</button>
-        </div>
+        <details>
+          <summary class="controls-head">
+            <h2>Controls</h2>
+            <span class="controls-who" id="controls-who">not in a room</span>
+            <span class="pad-pill" id="pad-pill" data-state="none">no gamepad</span>
+          </summary>
 
-        <ol class="control-list" id="control-list"></ol>
+          <div class="controls-body">
+            <div class="controls-actions">
+              <button class="btn btn-ghost btn-small" id="btn-controls-reset" type="button">reset to defaults</button>
+            </div>
 
-        <!--
-          Hidden until a gamepad exists. A deadzone slider with no axes to apply
-          it to is a mystery knob, and the browser reveals no pad at all until a
-          button has been pressed on it.
-        -->
-        <div class="calib" id="calib" hidden>
-          <div class="calib-row">
-            <label for="deadzone">deadzone</label>
-            <input type="range" id="deadzone" min="0.05" max="0.8" step="0.01" value="0.35" />
-            <output id="deadzone-out" for="deadzone">0.35</output>
-            <button class="btn btn-quiet" id="btn-calibrate" type="button">centre sticks</button>
+            <ol class="control-list" id="control-list"></ol>
+
+            <!--
+              Hidden until a gamepad exists. A deadzone slider with no axes to
+              apply it to is a mystery knob, and the browser reveals no pad at
+              all until a button has been pressed on it.
+            -->
+            <div class="calib" id="calib" hidden>
+              <div class="calib-row">
+                <label for="deadzone">deadzone</label>
+                <input type="range" id="deadzone" min="0.05" max="0.8" step="0.01" value="0.35" />
+                <output id="deadzone-out" for="deadzone">0.35</output>
+                <button class="btn btn-ghost btn-small" id="btn-calibrate" type="button">centre sticks</button>
+              </div>
+              <ol class="axes" id="axis-meters"></ol>
+            </div>
+
+            <p class="controls-hint" id="controls-hint"></p>
           </div>
-          <ol class="axes" id="axis-meters"></ol>
-        </div>
-
-        <p class="controls-hint" id="controls-hint"></p>
+        </details>
       </section>
 
       <section class="panel diagnostics">
-        <details open>
+        <details>
           <summary>Data channels</summary>
           <pre id="channel-table">no peers yet</pre>
         </details>
-        <details open>
+        <details>
           <summary>Log</summary>
           <ol class="log" id="log-list"></ol>
         </details>
       </section>
 
-      <footer class="cab-foot">
-        <p>Bring your own game files. Nothing is included, and nothing is fetched for you.</p>
+      <footer class="foot">
+        <p>No games ship with this and none are fetched for you — bring files you are entitled to use.</p>
+        <nav class="foot-links">
+          <a href="#/author">About the author</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://github.com/imshaikot/retro-games-p2p-multiplayer-coop" rel="noopener">Source</a>
+        </nav>
+        <p class="broker" id="broker-line"></p>
       </footer>
     </main>
 

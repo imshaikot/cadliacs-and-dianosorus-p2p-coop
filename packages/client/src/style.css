@@ -1,21 +1,21 @@
 /*
-  THE CABINET.
+  ONE TUBE IN A DARK ROOM.
 
-  The page is a machine you stand in front of: a backlit marquee at the top, a
-  screen sunk into a bezel, a control panel below it, a coin door at the bottom.
-  Nothing here belongs to any one game — this player runs whatever you load into
-  it, so the furniture is the cabinet rather than the artwork bolted to it.
+  The page is a machine seen at night: everything is deep CPS-board blue, and
+  exactly one thing glows. On the landing page that is the hero — a powered-on
+  tube running its attract loop. In a room it is the game screen. Every other
+  surface is quiet hardware: hairline seams, small stamped labels, monospace
+  readouts.
 
-  The organising rule is light. There is exactly one source, the fluorescent tube
-  behind the marquee, and everything else is lit by it: mouldings catch a
-  highlight on their upper edge and a shadow on the lower, recessed wells invert
-  that, and the room itself falls away from the top of the page. Colour is spent
-  almost nowhere else, which is what leaves the three player colours and a fault
-  free to mean something.
+  Colour discipline: blue surfaces, one warm accent. The accent is marquee
+  yellow — the colour of INSERT COIN — and it is spent only on the actions that
+  start something and on the room code. The three player colours and red-means-
+  recording are the only other hues on the page, so each still means something.
 
-  The accents are the colours arcade buttons actually come in. That is also why
-  --p1 and a fault share a red: a fault is never carried by hue alone, it is an
-  inverted block (see .error).
+  Type discipline: three faces, three jobs. The wordmark is a hand-drawn pixel
+  path (no webfont, crisp at any size). UI text is the system grotesk. Anything
+  that is a *readout* — the room code, the HUD, the log — is monospace, because
+  those are numbers that must line up and change without the layout twitching.
 
   Everything decorative is `pointer-events: none`. tools/verify drives real
   trusted mouse events at element centres, so an overlay that swallowed clicks
@@ -24,317 +24,345 @@
 :root {
   color-scheme: dark;
 
-  --room: #0b0a0d;      /* the unlit room behind the cabinet */
-  --cab-dark: #17161a;  /* shadow between panels, and recessed wells */
-  --cab-body: #232128;  /* the plastic itself */
-  --cab-face: #2c2932;  /* a panel turned toward the light */
-  --cab-edge: #3d3945;  /* moulding, catching the marquee */
-  --bezel: #0c0b0e;     /* the surround the tube sits in */
-  --screen: #07070a;
+  --void: #060a13;      /* the dark of the room */
+  --panel: #0c1322;     /* CPS board blue, unlit */
+  --panel-lit: #121b30; /* the same board catching screen light */
+  --well: #070c17;      /* recessed: inputs, the screen bezel */
+  --line: #1c2846;      /* hairline seams */
+  --line-lit: #2c3b64;
 
-  --ink: #efe9e2;       /* screen-printed white */
-  --dim: #a49c96;
-  --faint: #6f6862;
+  --ink: #e9eef9;
+  --dim: #97a3c2;
+  --faint: #5d6a8c;
 
-  /* The tube. The only warm light in the building. */
-  --glow: #fff3e2;
-  --glow-dim: #f0dcc2;
+  /* Marquee yellow. The only warm light in the building. */
+  --coin: #ffc83d;
+  --coin-hot: #ffe08a;
+  --coin-edge: #7e5c00;
+  --on-coin: #1a1200;
 
-  --btn-red: #e2474a;
-  --btn-blue: #3f8fd4;
-  --btn-green: #47ab5c;
+  --p1: #ff4f57;
+  --p2: #3ea6ff;
+  --p3: #46d483;
+  --ok: var(--p3);
+  --ng: var(--p1);
 
-  --p1: var(--btn-red);
-  --p2: var(--btn-blue);
-  --p3: var(--btn-green);
-  --ok: var(--btn-green);
-  --ng: var(--btn-red);
+  --gap: 14px;
+  --pad: 22px;
+  --radius: 8px;
 
-  --gap: 12px;
-  --pad: 20px;
-  --radius: 3px; /* moulded plastic, not a web card */
-
-  --font-cab: 'Avenir Next Condensed', 'Arial Narrow', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-ui: -apple-system, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
 
 /*
-  Two faces, two jobs. Cabinet lettering is screen-printed condensed sans, so
-  every label, heading and button uses it. Anything that is a *readout* — the
-  room code, the HUD, the log, the channel table — is monospace, because those
-  are numbers that have to line up and change without the layout twitching.
+  The UA's `[hidden] { display: none }` loses to any author `display`, which has
+  already produced one real bug (a hidden canvas painting black over the ROM
+  picker). This rule retires the whole class of it.
 */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
-  padding: var(--pad) var(--gap) calc(var(--pad) * 3);
-  background: radial-gradient(120% 70% at 50% 0%, #14131a 0%, var(--room) 70%);
+  padding: calc(var(--pad) * 1.2) var(--gap) calc(var(--pad) * 3);
+  background:
+    radial-gradient(90% 40rem at 50% -6rem, #101a33 0%, var(--void) 70%);
+  background-color: var(--void);
   color: var(--ink);
-  font: 15px/1.55 var(--font-cab);
+  font: 15px/1.55 var(--font-ui);
   -webkit-font-smoothing: antialiased;
 }
 
-.cab {
-  max-width: 60rem;
+::selection { background: var(--coin); color: var(--on-coin); }
+
+.shell {
+  max-width: 62rem;
   margin: 0 auto;
   display: grid;
   gap: var(--gap);
 }
 
-/* ---------------------------------------------------------------- marquee */
+/* The pixel wordmark. crispEdges keeps unit squares square at any scale. */
+.px {
+  display: block;
+  fill: currentColor;
+  shape-rendering: crispEdges;
+}
+
+/* -------------------------------------------------------------- masthead */
 
 /*
-  A backlit graphic panel, and the page's only light source. Everything below is
-  painted as if it were coming from here.
+  Slim header for the room and author views; the landing page leads with the
+  wordmark in the hero instead, so it hides this. A browser without :has()
+  shows it everywhere — harmless duplication, never a missing header.
 */
-.marquee {
-  position: relative;
-  overflow: hidden;
-  padding: calc(var(--pad) * 1.4) var(--pad) var(--pad);
-  text-align: center;
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #fffaf2 0%, var(--glow) 42%, var(--glow-dim) 100%);
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.25),
-    0 0 60px rgba(255, 235, 200, 0.14),
-    0 6px 18px rgba(0, 0, 0, 0.6);
-}
-/* The tube itself: a bright band behind the artwork, brightest at the top. */
-.marquee-tube {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 46%;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
-}
-
-.wordmark {
-  position: relative;
-  margin: 0;
+.masthead {
   display: flex;
   align-items: baseline;
-  justify-content: center;
-  gap: 0.3em;
-  /* Knocked out of the lit panel, the way a marquee graphic is opaque ink on a
-     translucent sheet with the tube behind it. */
-  color: var(--cab-dark);
-  font-weight: 700;
-  font-size: clamp(2.1rem, 8vw, 4rem);
-  line-height: 1;
-  letter-spacing: -0.02em;
-  text-transform: uppercase;
+  gap: 0.9rem;
+  padding: 0 0.2rem;
 }
-.wordmark-sub {
-  font-size: 0.46em;
-  letter-spacing: 0.16em;
-  padding: 0.16em 0.4em;
-  border-radius: 2px;
-  background: var(--btn-red);
-  color: var(--glow);
+body:has(#view-landing:not([hidden])) .masthead { display: none; }
+
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  text-decoration: none;
 }
-.marquee .tagline {
-  position: relative;
-  margin: 0.5rem 0 0;
-  color: #5b5148;
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.marquee .broker {
-  position: relative;
-  margin: 0.2rem 0 0;
-  color: #7d7166;
+.mark .px { height: 14px; width: auto; }
+.mark-chip { color: var(--coin); display: block; }
+.mark:hover .mark-chip { color: var(--coin-hot); }
+.mark:focus-visible { outline: 2px solid var(--coin); outline-offset: 4px; }
+.mast-tag {
+  margin: 0;
+  color: var(--faint);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
 
-/* In a room the marquee is just a header — the game gets the height. No JS
-   toggles this; the room view's `hidden` attribute drives it. */
-body:has(#view-room:not([hidden])) .marquee { padding: 0.6rem var(--pad); }
-body:has(#view-room:not([hidden])) .wordmark { font-size: clamp(1.1rem, 3.4vw, 1.5rem); }
-body:has(#view-room:not([hidden])) .marquee .tagline { display: none; }
+/* ------------------------------------------------------------------ hero */
 
-/* ----------------------------------------------------------------- panels */
+.hero { display: grid; gap: var(--gap); }
 
 /*
-  A moulded plastic panel. The 1px light top edge over a dark bottom edge is the
-  whole trick — it reads as a bevel catching the marquee from above.
+  The signature: a powered-on tube running its attract loop. Vignette, faint
+  scanlines, and a phosphor bloom on the wordmark. This is the one loud thing
+  on the page; everything after it stays quiet.
 */
-.panel {
+.crt {
   position: relative;
-  padding: var(--pad);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--cab-face), var(--cab-body) 60%);
+  overflow: hidden;
+  padding: clamp(2.4rem, 7vw, 4.5rem) clamp(1.2rem, 6vw, 4rem) clamp(2rem, 5vw, 3.2rem);
+  text-align: center;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 100% at 50% 0%, #182852 0%, #0c1530 48%, #080e1e 100%);
   box-shadow:
-    inset 0 1px 0 var(--cab-edge),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    0 2px 10px rgba(0, 0, 0, 0.45);
+    inset 0 0 90px rgba(4, 7, 16, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 20px 60px rgba(0, 0, 0, 0.55);
 }
-
-.panel h2 {
-  margin: 0 0 0.4rem;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--dim);
+/* Scanlines and a top sheen, painted once by the compositor. Inert to input. */
+.crt-glass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 18%),
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 4px);
 }
-
-/* --------------------------------------------------------------- coin door */
-
-.coin-door { padding-top: calc(var(--pad) * 1.2); }
 
 .attract {
-  margin: 0 0 var(--pad);
-  text-align: center;
-  font-size: 13px;
+  margin: 0 0 1.6rem;
+  font-family: var(--font-data);
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.42em;
-  text-indent: 0.42em;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
   text-transform: uppercase;
-  color: var(--btn-red);
+  color: var(--coin);
+  text-shadow: 0 0 14px rgba(255, 200, 61, 0.55);
   animation: attract-blink 1.6s steps(1, end) infinite;
 }
 @keyframes attract-blink {
   0%, 64% { opacity: 1; }
-  65%, 100% { opacity: 0.15; }
+  65%, 100% { opacity: 0.12; }
 }
 
-.door-grid {
-  display: grid;
-  gap: var(--gap);
-  grid-template-columns: 1fr 1fr;
-}
-@media (max-width: 40rem) { .door-grid { grid-template-columns: 1fr; } }
-
-/* Recessed, like the coin-return well: darker than the panel, bevel inverted. */
-.door-card {
+.wordmark {
+  margin: 0 0 1.4rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: var(--pad);
-  border-radius: var(--radius);
-  background: var(--cab-dark);
-  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.6), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(0.7rem, 2.5vw, 1.3rem);
+  color: var(--ink);
 }
-.door-card .hint { margin: 0; color: var(--faint); font-size: 13px; }
-.door-card .btn { margin-top: auto; }
+.wordmark .px {
+  width: min(62vw, 330px);
+  height: auto;
+  filter: drop-shadow(0 0 22px rgba(160, 190, 255, 0.35));
+}
+.wordmark-chip { color: var(--coin); display: block; }
+.wordmark-chip .px {
+  width: min(24vw, 128px);
+  filter: drop-shadow(0 0 18px rgba(255, 200, 61, 0.5));
+}
 
-/* The plate riveted to the cabinet: stamped, not printed. */
-.plate {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  margin: var(--pad) 0 0;
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: rgba(0, 0, 0, 0.45);
+.lede {
+  margin: 0 auto 2.2rem;
+  max-width: 34rem;
+  color: var(--dim);
+  font-size: 16px;
+  line-height: 1.65;
+  text-wrap: balance;
 }
-@media (max-width: 40rem) { .plate { grid-template-columns: repeat(2, 1fr); } }
-.plate > div { background: var(--cab-dark); padding: 0.6rem 0.8rem; }
-.plate dt {
-  color: var(--faint);
-  font-size: 10px;
-  letter-spacing: 0.2em;
+
+.start-row { display: grid; justify-items: center; gap: 0.6rem; margin-bottom: 2rem; }
+.start-row .btn-coin {
+  font-size: 16px;
+  padding: 0.95rem 2.6rem;
+}
+.start-hint { margin: 0; color: var(--faint); font-size: 12.5px; }
+
+/* Joining is the quieter path — most guests arrive by link and never type. */
+.join-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid rgba(44, 59, 100, 0.5);
+  max-width: 30rem;
+  margin: 0 auto;
+}
+.join-label { color: var(--dim); font-size: 13px; }
+.join-row input {
+  width: 13.5rem;
+  text-align: center;
   text-transform: uppercase;
 }
-.plate dd {
-  margin: 0.15rem 0 0;
-  color: var(--ink);
+
+/* The engineer's plaque: exact numbers, quietly stated. */
+.spec {
+  list-style: none;
+  margin: 0;
+  padding: 0 0.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 1.6rem;
+  row-gap: 0.3rem;
+  color: var(--faint);
   font-family: var(--font-data);
-  font-size: 13px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+.spec li { position: relative; }
+.spec li + li::before {
+  content: '·';
+  position: absolute;
+  left: -1rem;
+  color: var(--line-lit);
 }
 
-.cab-foot { margin: 0; padding: 0 var(--pad); text-align: center; }
-.cab-foot p { margin: 0; color: var(--faint); font-size: 12px; }
+/* ----------------------------------------------------------------- panels */
+
+.panel {
+  padding: var(--pad);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel-lit), var(--panel) 70%);
+}
+
+.panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.eyebrow {
+  margin: 0 0 0.3rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
 
 /* --------------------------------------------------------------- controls */
 
 /*
-  Buttons are moulded caps: a coloured dome with a light top edge that travels
-  *down* when pressed rather than changing colour. That is what a real one does,
-  and it is the cheapest way to make a flat page feel like hardware.
+  Two button voices. The coin button starts something and there is at most one
+  on screen; ghosts do everything else. Both press down 1px — hardware travel,
+  not a colour swap.
 */
 .btn {
   font: inherit;
   font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  padding: 0.7rem 1.1rem;
-  border: 0;
-  border-radius: var(--radius);
+  font-size: 13.5px;
+  letter-spacing: 0.06em;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
   cursor: pointer;
   color: var(--ink);
-  background: linear-gradient(180deg, #423d4a, #302c37);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 0 #14121a;
-  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+  background: var(--panel-lit);
+  /* A .btn may be an <a> — the author page's back link is one. */
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+  transition: transform 70ms ease-out, box-shadow 70ms ease-out,
+    background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
 }
-.btn:hover { background: linear-gradient(180deg, #4b4554, #37323f); }
-.btn:active {
+.btn:focus-visible { outline: 2px solid var(--coin); outline-offset: 2px; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { cursor: not-allowed; transform: none; opacity: 0.45; }
+
+.btn-coin {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 800;
+  color: var(--on-coin);
+  background: linear-gradient(180deg, var(--coin-hot) 0%, var(--coin) 45%);
+  box-shadow: 0 3px 0 var(--coin-edge), 0 6px 24px rgba(255, 200, 61, 0.22);
+}
+.btn-coin:hover:not(:disabled) { background: linear-gradient(180deg, #fff0c0 0%, #ffd45e 45%); }
+.btn-coin:active:not(:disabled) {
   transform: translateY(2px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 0 #14121a;
+  box-shadow: 0 1px 0 var(--coin-edge), 0 3px 12px rgba(255, 200, 61, 0.18);
 }
-.btn:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
-.btn:disabled {
-  color: var(--faint);
-  background: #2a2732;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  cursor: not-allowed;
-  transform: none;
-}
+.btn-coin:disabled { box-shadow: none; background: var(--panel-lit); color: var(--dim); opacity: 1; }
 
-/* The one red cap on the panel: the action that starts something. */
-.btn-primary {
-  color: #2a0d0e;
-  background: linear-gradient(180deg, #f0666a, var(--btn-red));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 2px 0 #7c1f21;
-}
-.btn-primary:hover { background: linear-gradient(180deg, #f47a7d, #e55558); }
-.btn-primary:active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 0 0 #7c1f21; }
-.btn-primary:disabled { color: var(--faint); background: #2a2732; box-shadow: none; }
-
-/* Service buttons: the small unlit ones behind the coin door. */
-.btn-quiet {
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  padding: 0.35rem 0.7rem;
+.btn-ghost {
   color: var(--dim);
-  background: #201e26;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 0 #131118;
+  background: transparent;
+  border-color: var(--line-lit);
 }
-.btn-quiet:hover { color: var(--ink); background: #29262f; }
-.btn-quiet:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07); }
+.btn-ghost:hover:not(:disabled) { color: var(--ink); border-color: var(--faint); background: rgba(44, 59, 100, 0.25); }
+
+.btn-small { font-size: 11px; padding: 0.32rem 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
 
 input {
   font: inherit;
   font-family: var(--font-data);
-  padding: 0.7rem 0.8rem;
-  border: 0;
-  border-radius: var(--radius);
-  background: #100f14;
+  font-size: 14px;
+  padding: 0.62rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--well);
   color: var(--ink);
-  letter-spacing: 0.12em;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  letter-spacing: 0.08em;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.55);
 }
-input::placeholder { color: var(--faint); letter-spacing: 0.16em; }
+input::placeholder { color: var(--faint); }
 input:focus {
   outline: none;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), inset 0 0 0 1px var(--glow);
+  border-color: var(--coin);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.55), 0 0 0 3px rgba(255, 200, 61, 0.15);
 }
 
 /*
-  A fault is an inverted block, never a red word. Red is a player colour here and
-  the primary button's colour too, so hue alone would read as neither urgent nor
+  A fault is an inverted block, never a red word: red is a player colour here
+  and the recording colour too, so hue alone would read as neither urgent nor
   wrong.
 */
-.error { min-height: 1.2em; margin: var(--gap) 0 0; }
+.error { min-height: 1.2em; margin: 0; }
 .error:not(:empty) {
-  padding: 0.6rem 0.8rem;
-  border-radius: var(--radius);
-  background: var(--btn-red);
-  color: #2a0d0e;
+  padding: 0.6rem 0.9rem;
+  border-radius: 7px;
+  background: var(--ng);
+  color: #2a0507;
   font-weight: 700;
   font-size: 13px;
 }
@@ -359,14 +387,15 @@ input:focus {
 /* The one string in this app that gets read aloud down a phone. */
 .code {
   font-family: var(--font-data);
-  font-size: clamp(1.2rem, 4vw, 1.8rem);
+  font-size: clamp(1.1rem, 3.6vw, 1.5rem);
   font-weight: 700;
-  letter-spacing: 0.16em;
-  color: var(--glow);
-  background: #100f14;
-  border-radius: var(--radius);
-  padding: 0.35rem 0.7rem;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+  letter-spacing: 0.14em;
+  color: var(--coin);
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0.3rem 0.7rem;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.55);
 }
 .status-block { display: flex; align-items: center; gap: 0.6rem; margin-left: auto; }
 
@@ -379,25 +408,25 @@ input:focus {
   padding: 0.3rem 0.7rem;
   border-radius: 999px;
   color: var(--faint);
-  background: #191720;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
+  background: var(--well);
+  border: 1px solid var(--line);
 }
-.pill[data-status='ready'] { color: #0d2413; background: var(--ok); box-shadow: 0 0 12px rgba(71, 171, 92, 0.5); }
-.pill[data-status='error'] { color: #2a0d0e; background: var(--ng); box-shadow: 0 0 12px rgba(226, 71, 74, 0.5); }
+.pill[data-status='ready'] { color: #05240f; background: var(--ok); border-color: transparent; box-shadow: 0 0 14px rgba(70, 212, 131, 0.45); }
+.pill[data-status='error'] { color: #2a0507; background: var(--ng); border-color: transparent; box-shadow: 0 0 14px rgba(255, 79, 87, 0.45); }
 .pill[data-status='connecting'],
-.pill[data-status='reconnecting'] { color: var(--glow); background: #3a3320; }
+.pill[data-status='reconnecting'] { color: var(--coin); border-color: rgba(255, 200, 61, 0.4); }
 
 /* --------------------------------------------------------------- the lobby */
 
 .lobby { margin-top: var(--pad); }
 .lobby-head { display: flex; align-items: baseline; gap: 0.5rem; }
-.lobby-count { color: var(--faint); font-weight: 400; letter-spacing: 0.1em; }
+.lobby-count { color: var(--faint); font-weight: 400; letter-spacing: 0.08em; }
 
 .roster { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gap); }
 @media (min-width: 46rem) { .roster { grid-template-columns: repeat(3, 1fr); } }
 
-/* A player's card wears their button colour: the stripe is the cap on the
-   panel, and one rule feeds the portrait, the slot label and the talker chip. */
+/* A player's card wears their colour: one rule feeds the stripe, the portrait,
+   the slot label and the talker chip. */
 [data-slot='1'] { --hue: var(--p1); }
 [data-slot='2'] { --hue: var(--p2); }
 [data-slot='3'] { --hue: var(--p3); }
@@ -407,15 +436,15 @@ input:focus {
   display: flex;
   gap: var(--gap);
   align-items: center;
-  padding: 0.7rem;
-  border-radius: var(--radius);
-  background: var(--cab-dark);
-  border-left: 5px solid var(--hue, var(--faint));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  padding: 0.75rem;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--hue, var(--faint));
+  background: var(--panel);
 }
-.roster li[data-self='true'] { background: #201e26; }
+.roster li[data-self='true'] { background: var(--panel-lit); }
 /* A live microphone is the one state in here worth catching your eye. */
-.roster li[data-talking='true'] { box-shadow: inset 0 0 0 1px var(--btn-red), 0 0 14px rgba(226, 71, 74, 0.28); }
+.roster li[data-talking='true'] { box-shadow: inset 0 0 0 1px var(--ng), 0 0 16px rgba(255, 79, 87, 0.22); }
 
 /*
  * The portrait, and the control tucked into its corner.
@@ -432,17 +461,16 @@ input:focus {
   color: var(--hue, var(--dim));
 }
 .portrait > .portrait-art {
-  width: 76px;
-  height: 76px;
-  padding: 0.5rem;
+  width: 72px;
+  height: 72px;
+  padding: 0.55rem;
   border-radius: 999px;
-  background: #100f14;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.07);
+  background: var(--well);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--line);
 }
-@media (max-width: 46rem) { .portrait > .portrait-art { width: 64px; height: 64px; } }
+@media (max-width: 46rem) { .portrait > .portrait-art { width: 60px; height: 60px; } }
 
-/* A button cap tucked into the portrait's corner — the same object as the ones
-   on the control panel, so it reads as pressable without a label. */
+/* A small round control on the portrait's corner — pressable without a label. */
 .mic-orb,
 .mic-badge {
   position: absolute;
@@ -453,43 +481,44 @@ input:focus {
   width: 30px;
   height: 30px;
   padding: 0;
-  border: 0;
+  border: 1px solid var(--line-lit);
   border-radius: 999px;
   color: var(--dim);
-  background: linear-gradient(180deg, #3b3644, #29252f);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 4px rgba(0, 0, 0, 0.7);
+  background: var(--panel-lit);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
 }
 .mic-badge { width: 26px; height: 26px; }
 .mic-icon { width: 16px; height: 16px; display: block; }
 .mic-badge .mic-icon { width: 14px; height: 14px; }
 .mic-orb { cursor: pointer; }
-.mic-orb:hover:not(:disabled) { color: var(--ink); }
-.mic-orb:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.mic-orb:hover:not(:disabled) { color: var(--ink); border-color: var(--faint); }
+.mic-orb:focus-visible { outline: 2px solid var(--coin); outline-offset: 2px; }
 .mic-orb:disabled { opacity: 0.45; cursor: not-allowed; }
 .mic-orb[data-busy='true'] { cursor: progress; }
-/* Pressed means the microphone is open — the cap is lit. */
+/* Red means recording — the one convention nobody has to learn. */
 .mic-orb[aria-pressed='true'],
 .mic-badge[data-muted='false'] {
-  color: #2a0d0e;
-  background: linear-gradient(180deg, #f0666a, var(--btn-red));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 10px rgba(226, 71, 74, 0.55);
+  color: #2a0507;
+  background: var(--ng);
+  border-color: transparent;
+  box-shadow: 0 0 12px rgba(255, 79, 87, 0.55);
 }
 
 .card-body { display: grid; gap: 0.1rem; min-width: 0; }
 .roster .slot {
   font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-size: 10px;
+  letter-spacing: 0.18em;
   color: var(--hue, var(--ink));
 }
-.roster .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.roster .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15.5px; font-weight: 600; }
 .roster .mic-state {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);
 }
-.roster .mic-state[data-muted='false'] { color: var(--btn-red); }
+.roster .mic-state[data-muted='false'] { color: var(--ng); }
 .roster .peer-id {
   color: var(--faint);
   font-family: var(--font-data);
@@ -500,38 +529,36 @@ input:focus {
 }
 .roster .you {
   position: absolute;
-  top: 0.4rem;
+  top: 0.45rem;
   right: 0.5rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 2px;
-  background: var(--glow);
-  color: var(--cab-dark);
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  background: var(--coin);
+  color: var(--on-coin);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-.roster .speaker { position: absolute; top: 0.35rem; right: 0.4rem; font-size: 10px; }
+.roster .speaker { position: absolute; top: 0.4rem; right: 0.45rem; }
 .roster .speaker[aria-pressed='false'] { opacity: 0.55; }
 
 /* ------------------------------------------------------------------ stage */
 
 .stage-wrap { position: relative; margin-top: var(--pad); }
 
-/* The tube sits in a deep plastic surround, which is what the bezel is. */
+/* The game screen sits in a deep bezel, the room view's one recessed surface. */
 .stage {
   position: relative;
   min-height: 14rem;
   display: grid;
   place-items: center;
-  padding: 14px;
-  border-radius: 6px;
-  background: var(--bezel);
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--well);
   overflow: hidden;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    inset 0 2px 14px rgba(0, 0, 0, 0.9),
-    0 4px 16px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 2px 16px rgba(0, 0, 0, 0.8);
   /* Double-clicking the screen toggles fullscreen; without this it also drags
      a selection across whatever placeholder text is under the pointer. */
   user-select: none;
@@ -540,42 +567,31 @@ input:focus {
 /*
  * The canvas carries its own intrinsic ratio from the width/height attributes
  * renderer.ts rewrites whenever the core's geometry changes, so `height: auto`
- * tracks whatever game is loaded. The rule this replaced pinned the container
- * to 384/224 and letterboxed anything else wrongly.
+ * tracks whatever game is loaded.
  */
 #screen {
   width: 100%;
   height: auto;
   display: block;
-  border-radius: 2px;
-  background: var(--screen);
+  border-radius: 3px;
+  background: #04060c;
   /* Pixel art blown up; never let the browser smooth it. */
   image-rendering: pixelated;
 }
-/*
- * An author `display` outranks the UA's `[hidden] { display: none }`, so without
- * this a canvas that JS had hidden still laid out at the full size of the stage
- * and painted black over the picker underneath it. In production — the only
- * place without a dev-server ROM — that left nothing to click but a black
- * rectangle. verify-prod hit-tests the picker now rather than trusting the
- * attribute, which is what would have caught it.
- */
-#screen[hidden] { display: none; }
 
 /*
- * Scanlines, on the tube only — the page is a cabinet, not a CRT, so this is the
- * one surface where they belong. A static pseudo-element the compositor paints
+ * Scanlines, on the tube only. A static pseudo-element the compositor paints
  * once, never a per-frame effect over a canvas repainting 59.63 times a second.
  * Inert to input, and below the fullscreen latch at z-index 2.
  */
 .stage::after {
   content: '';
   position: absolute;
-  inset: 14px;
+  inset: 12px;
   z-index: 1;
   pointer-events: none;
-  border-radius: 2px;
-  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+  border-radius: 3px;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 0 1px, transparent 1px 3px);
 }
 #stage-wrap:fullscreen .stage::after { inset: 0; border-radius: 0; }
 
@@ -583,14 +599,14 @@ input:focus {
    pointer is over the screen, like a video player's controls. */
 .stage-btn {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   z-index: 2;
   /* Deliberately NOT backdrop-filter: this button sits over a canvas that
      repaints 59.63 times a second, and a backdrop filter makes the compositor
      read that canvas back and blur it every single frame. It cost ~1ms of the
      16.78ms budget and dropped catch-up frames. A flat scrim is free. */
-  background: rgba(12, 11, 14, 0.9);
+  background: rgba(6, 10, 19, 0.85);
   /* Dimmed rather than hidden: a control nobody can find is not a control. */
   opacity: 0.5;
   transition: opacity 140ms ease-out;
@@ -602,53 +618,54 @@ input:focus {
   margin: 0;
   padding: 1rem;
   text-align: center;
-  color: var(--dim);
-  font-size: 13px;
-  letter-spacing: 0.24em;
+  color: var(--faint);
+  font-family: var(--font-data);
+  font-size: 12px;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
 }
 
 .rom-picker {
-  max-width: min(34rem, 100%);
+  max-width: min(32rem, 100%);
   padding: var(--pad);
-  border-radius: var(--radius);
+  border-radius: 7px;
   text-align: center;
   color: var(--dim);
-  background: var(--cab-body);
-  box-shadow: inset 0 1px 0 var(--cab-edge), 0 4px 14px rgba(0, 0, 0, 0.6);
+  background: var(--panel);
+  border: 1px solid var(--line);
 }
-.rom-picker > p { margin: 0 0 0.8rem; color: var(--ink); font-size: 15px; }
+.rom-picker > p:first-child { margin: 0 0 0.8rem; color: var(--ink); font-size: 15px; font-weight: 600; }
 .rom-bar {
   display: grid;
   gap: 0.5rem;
   padding: 0.7rem;
-  border-radius: var(--radius);
+  border-radius: 7px;
   text-align: left;
-  background: #100f14;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+  background: var(--well);
+  border: 1px solid var(--line);
 }
-.rom-bar input { background: transparent; box-shadow: none; padding: 0; font-size: 12px; }
+.rom-bar input { background: transparent; box-shadow: none; border: 0; padding: 0; font-size: 12px; }
 .rom-why { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.6; }
+/* The guest's half of the picker: nothing to do, and it says so. */
+.rom-wait { margin: 0; color: var(--dim); font-size: 12.5px; line-height: 1.6; }
 
 /* A transfer in flight. The bar is the element's own background, filled to
    --fraction, so there is no second node to keep in step with the label. */
-.rom-progress[hidden] { display: none; }
 .rom-progress {
-  margin: 0;
-  padding: 0.3rem 0.5rem;
-  border-radius: 2px;
+  margin: 0.6rem 0 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
   font-family: var(--font-data);
   font-size: 11px;
   color: var(--ink);
   background:
-    linear-gradient(90deg, rgba(71, 171, 92, 0.45) var(--fraction, 0%), transparent var(--fraction, 0%)),
-    #1b1a21;
+    linear-gradient(90deg, rgba(70, 212, 131, 0.4) var(--fraction, 0%), transparent var(--fraction, 0%)),
+    var(--panel-lit);
   transition: background 120ms linear;
 }
 
 /* Quieter than the HUD numbers beside it: this is standing context, not a
    figure anybody is watching change. */
-.rom-note[hidden] { display: none; }
 .rom-note {
   margin: 0.5rem 0 0;
   font-size: 11px;
@@ -670,15 +687,15 @@ input:focus {
 .netplay .phase { text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
 .netplay[data-phase='lockstep'] .phase { color: var(--ok); }
 .netplay[data-phase='stalled'] .phase { color: var(--ng); }
-.netplay[data-phase='syncing'] .phase { color: var(--glow); }
+.netplay[data-phase='syncing'] .phase { color: var(--coin); }
 .netplay[data-phase='solo'] .phase { color: var(--dim); }
 /* Peers disagreeing about a frame is the one number worth an inverted block. */
 .netplay .desync {
   background: var(--ng);
-  color: #2a0d0e;
+  color: #2a0507;
   font-weight: 700;
   padding: 0 0.4rem;
-  border-radius: 2px;
+  border-radius: 3px;
 }
 
 /* -------------------------------------------------------------- fullscreen */
@@ -702,6 +719,7 @@ input:focus {
   /* No bezel on a fullscreen screen — the surround would just be picture
      thrown away. */
   padding: 0;
+  border: 0;
   border-radius: 0;
   box-shadow: none;
 }
@@ -737,7 +755,7 @@ input:focus {
 /* ------------------------------------------------------- chat and the log */
 
 .chat { display: flex; align-items: stretch; gap: 0.5rem; margin-top: var(--pad); }
-.chat input { flex: 1; letter-spacing: normal; }
+.chat input { flex: 1; letter-spacing: normal; font-family: var(--font-ui); }
 
 .chat-log,
 .log {
@@ -750,85 +768,92 @@ input:focus {
   overflow: auto;
   font-family: var(--font-data);
 }
+.chat-log:empty { margin: 0; }
 .chat-log li {
-  padding: 0.3rem 0.6rem;
-  border-radius: 2px;
-  background: var(--cab-dark);
-  border-left: 3px solid transparent;
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
+  background: var(--well);
+  border-left: 2px solid transparent;
   font-size: 13px;
 }
-.chat-log li[data-mine='true'] { border-left-color: var(--glow); }
+.chat-log li[data-mine='true'] { border-left-color: var(--coin); }
 .chat-log .from { color: var(--dim); margin-right: 0.5rem; }
 
-.diagnostics summary {
+.diagnostics summary,
+.controls summary {
   cursor: pointer;
   color: var(--dim);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   list-style: none;
 }
-.diagnostics summary::-webkit-details-marker { display: none; }
-.diagnostics summary::before { content: '▸ '; color: var(--faint); }
-.diagnostics details[open] > summary::before { content: '▾ '; }
-.diagnostics summary:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.diagnostics summary::-webkit-details-marker,
+.controls summary::-webkit-details-marker { display: none; }
+.diagnostics summary::before,
+.controls summary::before { content: '▸ '; color: var(--faint); }
+.diagnostics details[open] > summary::before,
+.controls details[open] > summary::before { content: '▾ '; }
+.diagnostics summary:focus-visible,
+.controls summary:focus-visible { outline: 2px solid var(--coin); outline-offset: 2px; }
 .diagnostics details + details { margin-top: var(--gap); }
 .diagnostics pre {
   overflow: auto;
   margin: var(--gap) 0 0;
   padding: 0.7rem;
-  border-radius: var(--radius);
+  border-radius: 7px;
   font-size: 11px;
   color: var(--dim);
-  background: #100f14;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+  background: var(--well);
+  border: 1px solid var(--line);
 }
 .log li { font-size: 11px; color: var(--faint); white-space: pre-wrap; word-break: break-word; }
 .log li[data-level='info'] { color: var(--dim); }
-.log li[data-level='warn'] { color: #d8a24a; }
+.log li[data-level='warn'] { color: var(--coin); }
 .log li[data-level='error'] { color: var(--ng); }
-.log .ts { color: #4f4a45; margin-right: 0.5rem; }
+.log .ts { color: #3d4763; margin-right: 0.5rem; }
 
 /* --------------------------------------------------------------- identity */
 
 /*
- * The dialog that both HOST and JOIN come through. A name is mandatory, so the
- * confirm button is disabled until there is one; <dialog> handles the focus
- * trap, the backdrop and Escape without any code of ours.
+ * The dialog every way into a room comes through — START, JOIN, and a shared
+ * link. A name is mandatory, so the confirm button is disabled until there is
+ * one; <dialog> handles the focus trap, the backdrop and Escape without any
+ * code of ours.
  */
 .identity {
-  width: min(34rem, calc(100vw - 1.5rem));
+  width: min(33rem, calc(100vw - 1.5rem));
   padding: 0;
-  border: 0;
-  border-radius: var(--radius);
+  border: 1px solid var(--line-lit);
+  border-radius: 12px;
   overflow: hidden;
-  background: var(--cab-body);
+  background: var(--panel);
   color: var(--ink);
-  box-shadow: inset 0 1px 0 var(--cab-edge), 0 24px 60px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
 }
-.identity::backdrop { background: rgba(4, 4, 6, 0.78); }
-/* Its own lit header, so the dialog reads as a second marquee rather than a
-   floating card. */
-.identity h2 {
+.identity::backdrop { background: rgba(3, 5, 10, 0.8); }
+.identity-head {
+  padding: 1rem var(--pad) 0.8rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-lit);
+}
+.identity-head h2 {
   margin: 0;
-  padding: 0.8rem var(--pad);
-  background: linear-gradient(180deg, var(--glow), var(--glow-dim));
-  color: var(--cab-dark);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 .identity-body { display: grid; gap: 0.5rem; padding: var(--pad); }
 .identity .field {
   margin: 0.5rem 0 0;
   color: var(--faint);
   font-size: 10px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 .identity .error { margin: 0; min-height: 0; }
+.identity input { font-family: var(--font-ui); letter-spacing: normal; }
 .identity menu {
   margin: var(--gap) 0 0;
   padding: 0;
@@ -837,12 +862,13 @@ input:focus {
   align-items: stretch;
   justify-content: flex-end;
 }
-.identity menu .btn-primary { flex: 1; }
+.identity menu .btn-coin { flex: 1; }
 .mic-note {
   margin: 0.6rem 0 0;
   padding: 0.6rem 0.8rem;
-  border-radius: var(--radius);
-  background: var(--cab-dark);
+  border-radius: 7px;
+  background: var(--well);
+  border: 1px solid var(--line);
   color: var(--dim);
   font-size: 12px;
 }
@@ -852,9 +878,9 @@ input:focus {
   font-family: var(--font-data);
   font-size: 11px;
   padding: 0.05rem 0.35rem;
-  border-radius: 2px;
-  background: var(--glow);
-  color: var(--cab-dark);
+  border-radius: 4px;
+  background: var(--coin);
+  color: var(--on-coin);
   font-weight: 700;
 }
 
@@ -865,17 +891,18 @@ input:focus {
 }
 @media (max-width: 30rem) { .avatar-grid { grid-template-columns: repeat(3, 1fr); } }
 
-/* Each token is a blank button cap until you choose one. */
+/* Each token is a dark tile until you choose it; chosen is a lit coin. */
 .avatar-pick {
   display: grid;
   justify-items: center;
   gap: 0.3rem;
   padding: 0.5rem 0.25rem;
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #3b3644, #29252f);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 2px 0 #14121a;
+  border-radius: 7px;
+  background: var(--well);
+  border: 1px solid var(--line);
   color: var(--dim);
   cursor: pointer;
+  transition: border-color 100ms ease-out, color 100ms ease-out;
 }
 /* The radio itself is the a11y story; the tile is what people look at. */
 .avatar-pick input {
@@ -886,21 +913,21 @@ input:focus {
   opacity: 0;
   pointer-events: none;
 }
-.avatar-pick:hover { color: var(--ink); }
+.avatar-pick:hover { color: var(--ink); border-color: var(--line-lit); }
 .avatar-pick:has(input:checked) {
-  color: #2a0d0e;
-  background: linear-gradient(180deg, #f0666a, var(--btn-red));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 0 12px rgba(226, 71, 74, 0.4);
+  color: var(--on-coin);
+  background: linear-gradient(180deg, var(--coin-hot), var(--coin));
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(255, 200, 61, 0.3);
 }
-.avatar-pick:has(input:focus-visible) { outline: 2px solid var(--glow); outline-offset: 2px; }
+.avatar-pick:has(input:focus-visible) { outline: 2px solid var(--coin); outline-offset: 2px; }
 .avatar-name { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
 
 .avatar-art { fill: currentColor; display: block; }
 .avatar-pick .avatar-art { width: 28px; height: 28px; }
 
-/* Host only: how many the room is opened for. Same cap treatment as the tokens,
-   wider, because the number is the whole content. */
-.capacity[hidden] { display: none; }
+/* Host only: how many the room is opened for. Same tiles, wider, because the
+   number is the whole content. */
 .capacity-grid { display: grid; grid-auto-flow: column; gap: 0.4rem; justify-content: start; }
 .capacity-pick {
   display: grid;
@@ -908,11 +935,12 @@ input:focus {
   gap: 0.1rem;
   min-width: 5rem;
   padding: 0.5rem 0.9rem;
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #3b3644, #29252f);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 2px 0 #14121a;
+  border-radius: 7px;
+  background: var(--well);
+  border: 1px solid var(--line);
   color: var(--dim);
   cursor: pointer;
+  transition: border-color 100ms ease-out, color 100ms ease-out;
 }
 .capacity-pick input {
   position: absolute;
@@ -922,14 +950,15 @@ input:focus {
   opacity: 0;
   pointer-events: none;
 }
-.capacity-pick:hover { color: var(--ink); }
+.capacity-pick:hover { color: var(--ink); border-color: var(--line-lit); }
 .capacity-pick:has(input:checked) {
-  color: #2a0d0e;
-  background: linear-gradient(180deg, #f0666a, var(--btn-red));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 0 12px rgba(226, 71, 74, 0.4);
+  color: var(--on-coin);
+  background: linear-gradient(180deg, var(--coin-hot), var(--coin));
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(255, 200, 61, 0.3);
 }
-.capacity-pick:has(input:focus-visible) { outline: 2px solid var(--glow); outline-offset: 2px; }
-.capacity-n { font-size: 22px; font-weight: 700; line-height: 1; }
+.capacity-pick:has(input:focus-visible) { outline: 2px solid var(--coin); outline-offset: 2px; }
+.capacity-n { font-size: 22px; font-weight: 800; line-height: 1; }
 .capacity-word { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; }
 
 /* Out of the layout rather than display:none — an <audio> element under
@@ -943,33 +972,17 @@ input:focus {
 
 /* --------------------------------------------------------- control panel */
 
-/*
- * The control panel lives outside #view-room, so it is reachable before a room
- * exists. Colours are indirected through local variables because the page
- * palette has been renamed twice now; this block does not care which set of
- * names is in force.
- */
-.controls {
-  --ctl-lit: var(--ok, #47ab5c);
-  --ctl-warn: var(--ng, #e2474a);
-  --ctl-quiet: var(--faint, #6f6862);
-}
-
-.controls-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: var(--gap);
-}
-.controls-head h2 { margin: 0; }
+.controls summary { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.controls summary h2 { margin: 0; display: inline; color: inherit; }
 .controls-who {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--hue, var(--ctl-quiet));
+  color: var(--hue, var(--faint));
 }
+.controls-body { margin-top: var(--gap); display: grid; gap: var(--gap); }
+.controls-actions { display: flex; justify-content: flex-end; }
 
 /* The pad lamp is the whole answer to "is my controller even seen?" — the
    Gamepad API stays silent until a button is pressed, which surprises everyone. */
@@ -981,13 +994,13 @@ input:focus {
   text-transform: uppercase;
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  color: var(--ctl-quiet);
-  background: #191720;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
+  color: var(--faint);
+  background: var(--well);
+  border: 1px solid var(--line);
   white-space: nowrap;
 }
-.pad-pill[data-state='standard'] { color: #0d2413; background: var(--ctl-lit); }
-.pad-pill[data-state='unmapped'] { color: var(--cab-dark); background: var(--glow); }
+.pad-pill[data-state='standard'] { color: #05240f; background: var(--ok); border-color: transparent; }
+.pad-pill[data-state='unmapped'] { color: var(--on-coin); background: var(--coin); border-color: transparent; }
 
 .control-list {
   list-style: none;
@@ -1005,19 +1018,19 @@ input:focus {
   gap: 0.6rem;
   min-height: 2.4rem;
   padding: 0.3rem 0.6rem;
-  border-radius: var(--radius);
-  background: var(--cab-dark);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  background: var(--well);
+  border: 1px solid var(--line);
   transition: background-color 80ms linear;
 }
 /* Lit while the control is actually down. This is the legend's real job: it is
    how you find out that the stick you just plugged in is stuck on LEFT. */
-.control-list li[data-held='true'] { background: #1d2a1f; }
-.control-list li[data-capturing='true'] { background: #2c2820; }
+.control-list li[data-held='true'] { background: #0e2417; border-color: rgba(70, 212, 131, 0.4); }
+.control-list li[data-capturing='true'] { background: #2a2310; border-color: rgba(255, 200, 61, 0.4); }
 
 .ctl-label { display: flex; align-items: center; gap: 0.5rem; min-width: 5rem; }
-/* The legend's glyphs are button caps themselves, laid out in panel order, so
-   the legend looks like the thing it describes. */
+/* The legend's glyphs are button caps laid out in panel order, so the legend
+   looks like the thing it describes. */
 .ctl-glyph {
   display: grid;
   place-items: center;
@@ -1027,19 +1040,20 @@ input:focus {
   border-radius: 999px;
   font-size: 12px;
   color: var(--ink);
-  background: linear-gradient(180deg, #3b3644, #29252f);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  background: var(--panel-lit);
+  border: 1px solid var(--line-lit);
 }
 .control-list li[data-held='true'] .ctl-glyph {
-  color: #0d2413;
-  background: linear-gradient(180deg, #6ad07f, var(--ctl-lit));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 8px rgba(71, 171, 92, 0.5);
+  color: #05240f;
+  background: var(--ok);
+  border-color: transparent;
+  box-shadow: 0 0 8px rgba(70, 212, 131, 0.5);
 }
 .ctl-name { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
 .control-list li[data-held='true'] .ctl-name { color: var(--ink); }
 
 .ctl-binds { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
-.ctl-none { font-size: 11px; color: var(--ctl-warn); letter-spacing: 0.1em; text-transform: uppercase; }
+.ctl-none { font-size: 11px; color: var(--ng); letter-spacing: 0.1em; text-transform: uppercase; }
 
 button.bind {
   font: inherit;
@@ -1049,33 +1063,28 @@ button.bind {
   align-items: center;
   gap: 0.25rem;
   padding: 0.1rem 0.4rem;
-  border: 0;
-  border-radius: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
   color: var(--dim);
-  background: #100f14;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  background: var(--panel);
   cursor: pointer;
 }
-button.bind:hover { color: var(--ink); }
-button.bind:focus-visible { outline: 2px solid var(--glow); outline-offset: 1px; }
+button.bind:hover { color: var(--ink); border-color: var(--line-lit); }
+button.bind:focus-visible { outline: 2px solid var(--coin); outline-offset: 1px; }
 /* Lit per physical control, not per game button: with three things bound to B4
    this is what tells you which one fired. */
-button.bind[data-down='true'] { color: #0d2413; background: var(--ctl-lit); }
+button.bind[data-down='true'] { color: #05240f; background: var(--ok); border-color: transparent; }
 button.bind[data-source='pad-axis'] { font-style: italic; }
-button.bind.add { color: var(--ctl-quiet); }
+button.bind.add { color: var(--faint); }
 button.bind.add:hover { color: var(--ink); }
 
-.bind .x { color: var(--ctl-quiet); font-size: 12px; line-height: 1; }
-.bind .x:hover { color: var(--ctl-warn); }
-button.bind[data-down='true'] .x { color: #0d2413; }
+.bind .x { color: var(--faint); font-size: 12px; line-height: 1; }
+.bind .x:hover { color: var(--ng); }
+button.bind[data-down='true'] .x { color: #05240f; }
 
 /* ------------------------------------------------------------ calibration */
 
-.calib {
-  margin-top: var(--pad);
-  padding-top: var(--pad);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
+.calib { padding-top: var(--gap); border-top: 1px solid var(--line); }
 .calib-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .calib-row label {
   font-size: 11px;
@@ -1090,22 +1099,23 @@ button.bind[data-down='true'] .x { color: #0d2413; }
   min-width: 8rem;
   max-width: 18rem;
   padding: 0;
+  border: 0;
   background: transparent;
   box-shadow: none;
-  accent-color: var(--glow);
+  accent-color: var(--coin);
 }
 
 .axes { list-style: none; margin: var(--gap) 0 0; padding: 0; display: grid; gap: 0.3rem; }
 .axes li { display: flex; align-items: center; gap: 0.6rem; font-size: 11px; }
 .axis-name { min-width: 4.5rem; color: var(--dim); letter-spacing: 0.1em; text-transform: uppercase; }
-.axis-value { min-width: 3rem; text-align: right; font-family: var(--font-data); color: var(--ctl-quiet); }
+.axis-value { min-width: 3rem; text-align: right; font-family: var(--font-data); color: var(--faint); }
 
 .axis-track {
   position: relative;
   flex: 1;
   height: 8px;
   border-radius: 999px;
-  background: #100f14;
+  background: var(--well);
   overflow: hidden;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
 }
@@ -1121,11 +1131,11 @@ button.bind[data-down='true'] .x { color: #0d2413; }
   background: rgba(255, 255, 255, 0.18);
 }
 .axis-band { position: absolute; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.07); }
-.axis-fill { position: absolute; top: 0; bottom: 0; background: var(--ctl-quiet); }
+.axis-fill { position: absolute; top: 0; bottom: 0; background: var(--faint); }
 /* Past the deadzone the axis is genuinely pressing a button. */
-.axis-fill[data-live='true'] { background: var(--ctl-lit); }
+.axis-fill[data-live='true'] { background: var(--ok); }
 
-.controls-hint { margin: var(--pad) 0 0; font-size: 12px; color: var(--ctl-quiet); }
+.controls-hint { margin: 0; font-size: 12px; color: var(--faint); }
 
 /* ------------------------------------------------------- who is talking */
 
@@ -1133,13 +1143,10 @@ button.bind[data-down='true'] .x { color: #0d2413; }
  * Inside the stage wrapper, which is the element that goes fullscreen, so this
  * comes along with the picture instead of being left behind on the page.
  */
-/* An author `display` outranks the UA's `[hidden] { display: none }`, so the
-   attribute only works if this rule opts out of applying to it. */
-.speaking[hidden] { display: none; }
 .speaking {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 18px;
+  right: 18px;
   /* Above the HUD rows (2). */
   z-index: 3;
   display: flex;
@@ -1165,8 +1172,8 @@ button.bind[data-down='true'] .x { color: #0d2413; }
   gap: 0.4rem;
   padding: 0.2rem 0.6rem 0.2rem 0.3rem;
   border-radius: 999px;
-  background: rgba(12, 11, 14, 0.88);
-  box-shadow: inset 0 0 0 1px var(--hue, var(--btn-red));
+  background: rgba(6, 10, 19, 0.88);
+  box-shadow: inset 0 0 0 1px var(--hue, var(--ng));
   color: var(--hue, var(--ink));
   font-size: 12px;
 }
@@ -1175,8 +1182,47 @@ button.bind[data-down='true'] .x { color: #0d2413; }
 
 /* The lobby card lights up for the same reason, next to the portrait. */
 .roster li[data-speaking='true'] .portrait-art {
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 0 0 2px var(--btn-red), 0 0 16px rgba(226, 71, 74, 0.45);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7), 0 0 0 2px var(--ng), 0 0 16px rgba(255, 79, 87, 0.45);
 }
+
+/* ----------------------------------------------------------------- author */
+
+.author { display: grid; gap: 0.6rem; justify-items: start; }
+/* Written as `.author .author-name` so it outranks `.panel h2`, which would
+   otherwise shrink the one human name on the site into a section label. */
+.author .author-name {
+  margin: 0;
+  font-size: clamp(1.5rem, 4.5vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  text-transform: none;
+  color: var(--ink);
+}
+.author-line { margin: 0; color: var(--dim); }
+.author-story { margin: 0.4rem 0 0; max-width: 38rem; color: var(--dim); line-height: 1.7; }
+.author-links {
+  list-style: none;
+  margin: 0.6rem 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  font-family: var(--font-data);
+  font-size: 13px;
+}
+.author-links a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line-lit); }
+.author-links a:hover { color: var(--coin); border-bottom-color: var(--coin); }
+.author-links a:focus-visible { outline: 2px solid var(--coin); outline-offset: 3px; }
+.author-links li::before { content: '→ '; color: var(--faint); }
+
+/* ----------------------------------------------------------------- footer */
+
+.foot { margin: 0; padding: 0 var(--pad); text-align: center; display: grid; gap: 0.3rem; }
+.foot p { margin: 0; color: var(--faint); font-size: 12px; }
+.foot-links { font-size: 12px; color: var(--faint); display: flex; gap: 0.6rem; justify-content: center; }
+.foot-links a { color: var(--dim); text-decoration: none; border-bottom: 1px solid var(--line-lit); }
+.foot-links a:hover { color: var(--coin); border-bottom-color: var(--coin); }
+.foot-links a:focus-visible { outline: 2px solid var(--coin); outline-offset: 3px; }
+.foot .broker { font-family: var(--font-data); font-size: 10px; color: #3d4763; }
 
 /* ---------------------------------------------------------- reduced motion */
 
@@ -1185,6 +1231,8 @@ button.bind[data-down='true'] .x { color: #0d2413; }
   .btn,
   .control-list li,
   .stage-btn,
+  .avatar-pick,
+  .capacity-pick,
   #stage-wrap:fullscreen .hud-rows { transition: none; }
   .btn:active { transform: none; }
 }

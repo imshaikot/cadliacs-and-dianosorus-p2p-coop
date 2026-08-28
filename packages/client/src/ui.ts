@@ -93,6 +93,9 @@ export class UI {
   readonly #btnFull = must<HTMLButtonElement>('btn-fullscreen');
   readonly #stageMessage = must<HTMLElement>('stage-message');
   readonly #romPicker = must<HTMLElement>('rom-picker');
+  readonly #romPickerLead = must<HTMLElement>('rom-picker-lead');
+  readonly #romBar = must<HTMLElement>('rom-bar');
+  readonly #romWait = must<HTMLElement>('rom-wait');
   readonly #romFile = must<HTMLInputElement>('rom-file');
   readonly #romProgress = must<HTMLElement>('rom-progress');
   readonly #romNote = must<HTMLElement>('rom-note');
@@ -113,7 +116,10 @@ export class UI {
   readonly #voiceSinks = must<HTMLElement>('voice-sinks');
   readonly #lobbyCount = must<HTMLElement>('lobby-count');
   readonly #speakingBar = must<HTMLElement>('speaking');
+  readonly #authorView = must<HTMLElement>('view-author');
   #shareText = '';
+  /** Which side of the room we are on. Decides who gets a file input. */
+  #role: 'host' | 'guest' | null = null;
   #idleTimer: number | null = null;
   /** Which button opened the identity dialog, and so what confirming means. */
   #pending: { role: 'host' | 'guest'; code: string } | null = null;
@@ -357,14 +363,25 @@ export class UI {
     this.#pending = { role, code };
     this.showError('');
     this.#identityError.textContent = '';
-    this.#identityTitle.textContent = role === 'host' ? 'WHO ARE YOU' : 'WHO IS JOINING';
-    this.#btnIdentityGo.textContent = role === 'host' ? 'HOST A GAME' : 'JOIN GAME';
+    this.#identityTitle.textContent = role === 'host' ? 'Who are you?' : "Who's joining?";
+    this.#btnIdentityGo.textContent = role === 'host' ? 'Start the room' : 'Join the room';
     // Only the host opens the room, so only the host chooses its size.
     this.#capacityBlock.hidden = role !== 'host';
     this.#syncIdentityForm();
     this.#dialog.showModal();
     this.#nameInput.focus();
     this.#nameInput.select();
+  }
+
+  /**
+   * A guest arriving on a shared link skips the landing page's join form and
+   * goes straight to the dialog. Opening a <dialog> needs no user activation;
+   * the JOIN click inside it is the real gesture gotcha #6 wants, so a link
+   * still never joins — or touches the microphone — on its own.
+   */
+  openGuestJoin(code: string): void {
+    this.prefillCode(code);
+    this.#openIdentity('guest', code);
   }
 
   #syncIdentityForm(): void {
@@ -430,22 +447,41 @@ export class UI {
   }
 
   showRoom(role: 'host' | 'guest', roomCode: string): void {
+    this.#role = role;
     this.#landing.hidden = true;
+    this.#authorView.hidden = true;
     this.#room.hidden = false;
-    this.#codeLabel.textContent = role === 'host' ? 'ROOM CODE — share this' : 'JOINED ROOM';
+    this.#codeLabel.textContent = role === 'host' ? 'Room code — share it' : 'Room';
     this.#roomCode.textContent = formatRoomCode(roomCode);
     // A host shares a link; a guest has nothing useful to hand on but the code.
     this.#shareText = role === 'host' ? joinLink(roomCode) : formatRoomCode(roomCode);
     this.#btnCopy.title = this.#shareText;
+    // Settled here, not when the picker shows: only the host may load a file.
+    // A guest is sent the host's copy, so its picker is a waiting line.
+    this.#romBar.hidden = role !== 'host';
+    this.#romWait.hidden = role === 'host';
   }
 
   showLanding(): void {
     // Leaving the room must not strand the player in a fullscreen black box.
     if (this.fullscreen) void document.exitFullscreen().catch(() => {});
     this.closeIdentity();
+    this.#role = null;
     this.#landing.hidden = false;
+    this.#authorView.hidden = true;
     this.#room.hidden = true;
     this.setBusy(false);
+  }
+
+  /**
+   * The author page swaps in for the landing page and never for a live room —
+   * mid-game the URL is the room's, and nothing should be able to hide the
+   * game behind a biography.
+   */
+  showAuthorView(show: boolean): void {
+    if (!this.#room.hidden) return;
+    this.#authorView.hidden = !show;
+    this.#landing.hidden = show;
   }
 
   setStatus(status: TransportStatus, detail: string): void {
@@ -661,6 +697,12 @@ export class UI {
   }
 
   showRomPicker(show: boolean): void {
+    // The host loads a file; a guest waits for the host's copy. The hidden
+    // state of the two halves is set at showRoom(), so this only words the lead.
+    this.#romPickerLead.textContent =
+      this.#role === 'guest'
+        ? 'Waiting for the game to arrive…'
+        : 'Load a game to start the emulator.';
     this.#romPicker.hidden = !show;
     this.#stageMessage.hidden = show;
     if (show) this.#btnFull.hidden = true;
