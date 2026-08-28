@@ -95,6 +95,7 @@ export class UI {
   readonly #romPicker = must<HTMLElement>('rom-picker');
   readonly #romFile = must<HTMLInputElement>('rom-file');
   readonly #romProgress = must<HTMLElement>('rom-progress');
+  readonly #romNote = must<HTMLElement>('rom-note');
   readonly #hud = must<HTMLElement>('emu-hud');
   readonly #netHud = must<HTMLElement>('net-hud');
   readonly #dialog = must<HTMLDialogElement>('identity-modal');
@@ -650,6 +651,13 @@ export class UI {
     this.#romProgress.textContent = detail;
     if (fraction === null) this.#romProgress.style.removeProperty('--fraction');
     else this.#romProgress.style.setProperty('--fraction', `${Math.round(fraction * 100)}%`);
+  }
+
+  /** Names the loaded game and whose copy it is, under the picture. */
+  setRomNote(name: string, origin: 'dev-server' | 'file' | 'peer'): void {
+    const from = origin === 'peer' ? 'sent by a player in this room' : 'your file';
+    this.#romNote.textContent = `${name} · ${from}`;
+    this.#romNote.hidden = false;
   }
 
   showRomPicker(show: boolean): void {

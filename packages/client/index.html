@@ -187,6 +187,14 @@
           <div class="speaking" id="speaking" hidden aria-live="polite"></div>
 
           <div class="hud-rows">
+            <!--
+              What is loaded and whose copy it is. This doubles as the standing
+              note that the player ships no games: saying it next to the game you
+              are actually playing lands better than a line of legalese nobody
+              reads, and "sent by a player in this room" is genuinely useful when
+              three people are trying to work out why one of them desynced.
+            -->
+            <p class="rom-note" id="rom-note" hidden></p>
             <p class="hud" id="emu-hud" hidden></p>
             <p class="hud netplay" id="net-hud" hidden></p>
           </div>

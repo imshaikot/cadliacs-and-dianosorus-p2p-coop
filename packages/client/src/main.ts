@@ -269,6 +269,7 @@ function startEmulation(rom: RomSource): void {
     return;
   }
   log.info('game file loaded', { name: rom.name, bytes: rom.bytes.length, from: rom.origin });
+  ui.setRomNote(rom.name, rom.origin);
   // Now we can answer anyone else who is stuck at the same point we were.
   void romShare?.setMine(rom);
 

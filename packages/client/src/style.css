@@ -646,6 +646,16 @@ input:focus {
   transition: background 120ms linear;
 }
 
+/* Quieter than the HUD numbers beside it: this is standing context, not a
+   figure anybody is watching change. */
+.rom-note[hidden] { display: none; }
+.rom-note {
+  margin: 0.5rem 0 0;
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: 0.04em;
+}
+
 .hud {
   margin: 0.5rem 0 0;
   font-family: var(--font-data);
