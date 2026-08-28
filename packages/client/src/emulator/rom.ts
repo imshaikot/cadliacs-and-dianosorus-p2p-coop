@@ -10,7 +10,7 @@
 export interface RomSource {
   name: string;
   bytes: Uint8Array;
-  origin: 'dev-server' | 'file';
+  origin: 'dev-server' | 'file' | 'peer';
 }
 
 /** Injected by vite.config.ts; empty string in a production build. */

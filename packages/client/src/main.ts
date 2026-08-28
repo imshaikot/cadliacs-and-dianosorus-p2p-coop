@@ -9,6 +9,7 @@ import { loadRomFromDevServer, loadRomFromFile } from './emulator/rom.js';
 import type { RomSource } from './emulator/rom.js';
 import { Log } from './log.js';
 import { Netplay } from './net/netplay.js';
+import { RomShare } from './net/romshare.js';
 import { Router } from './router.js';
 import { Session } from './session.js';
 import { UI } from './ui.js';
@@ -22,6 +23,7 @@ let session: Session | null = null;
 let channelTimer: number | null = null;
 let machine: Machine | null = null;
 let netplay: Netplay | null = null;
+let romShare: RomShare | null = null;
 let voice: Voice | null = null;
 let hudTimer: number | null = null;
 /** Guards the microphone toggle, which now has to await getUserMedia. */
@@ -145,6 +147,10 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
     log,
   });
   session = next;
+  romShare = new RomShare(next.transport, log, {
+    onReceived: (rom) => startEmulation(rom),
+    onProgress: (fraction, detail) => ui.showRomProgress(fraction, detail),
+  });
   mic.attach(next.transport, ui.voiceSinks);
   mic.onSpeakingChange = (speaking) => ui.renderSpeaking(speaking);
   ui.setMicAvailable(mic.canTalk);
@@ -155,6 +161,8 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
     ui.setCapacity(next.capacity);
     // Voice only measures peers the room says are unmuted; see setPeerMuted.
     for (const p of players) if (!p.isSelf) mic.setPeerMuted(p.peerId, p.muted);
+    // Anyone who just arrived may be waiting on a file we already hold.
+    romShare?.offerTo();
     ui.renderRoster(players, (id) => mic.isPeerAudible(id));
   });
   // Being refused is not an error state to sit in: go back to the landing page
@@ -225,15 +233,22 @@ async function bootEmulator(): Promise<void> {
   machine.onBeforeFrame = () => controls.poll();
   log.info('emulator core loaded');
 
-  ui.showStageMessage('looking for the ROM…');
+  ui.showStageMessage('looking for a game…');
   const rom = await loadRomFromDevServer();
-  if (!rom) {
-    log.info('no ROM served by the dev server, asking for one');
-    ui.showStageMessage('');
-    ui.showRomPicker(true);
+  if (rom) {
+    startEmulation(rom);
     return;
   }
-  startEmulation(rom);
+  /*
+   * Nobody handed us a file. Show the picker — but a peer may still offer one,
+   * and RomShare asks for it the moment an offer arrives, so this is a fallback
+   * rather than a dead end. Whichever lands first wins: a file the player picks,
+   * or one a peer sends.
+   */
+  romShare?.request();
+  log.info('no local game file, waiting for a peer to offer one or for a pick');
+  ui.showStageMessage('');
+  ui.showRomPicker(true);
 }
 
 function startEmulation(rom: RomSource): void {
@@ -253,7 +268,9 @@ function startEmulation(rom: RomSource): void {
     ui.showRomPicker(true);
     return;
   }
-  log.info('ROM loaded', { name: rom.name, bytes: rom.bytes.length, from: rom.origin });
+  log.info('game file loaded', { name: rom.name, bytes: rom.bytes.length, from: rom.origin });
+  // Now we can answer anyone else who is stuck at the same point we were.
+  void romShare?.setMine(rom);
 
   void m.start().then(
     async () => {
@@ -393,6 +410,8 @@ async function teardown(reason: string): Promise<void> {
   netplay = null;
   voice?.dispose();
   voice = null;
+  romShare?.dispose();
+  romShare = null;
   const m = machine;
   machine = null;
   if (m) await m.dispose();

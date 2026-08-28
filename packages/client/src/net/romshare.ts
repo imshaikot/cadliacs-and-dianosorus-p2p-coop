@@ -1,0 +1,265 @@
+import { StateAssembler, chunkRom, decodeRomChunk } from '@retro/shared';
+import type { ControlMessage, PeerId, Transport } from '@retro/shared';
+
+import type { Log } from '../log.js';
+import type { RomSource } from '../emulator/rom.js';
+
+/**
+ * Handing your loaded game file to a peer who has none.
+ *
+ * Every peer runs its own emulator, so every peer needs the same bytes. Asking
+ * three people to find the same file before anyone can play is the single
+ * biggest thing between "I have a room code" and "we are playing", and the mesh
+ * already has a channel that carries megabytes — the savestate rides it on every
+ * join.
+ *
+ * Two rules shape everything here.
+ *
+ * **It cannot stall a frame.** The same invariant voice lives under. A game file
+ * is ~250x a savestate, and pushing 256 chunks into the channel in one go blocks
+ * the main thread long enough to drop frames for everyone in the room, not just
+ * the peer receiving it. So the send is paced: a small batch, then yield to the
+ * event loop, then the next. It finishes in about a second and nobody's clock
+ * notices.
+ *
+ * **The bytes are checked before they are trusted.** A peer controls this
+ * payload. It is size-capped before a buffer is allocated and fingerprinted
+ * before it is handed to the emulator, so a truncated or swapped file fails as a
+ * message rather than as a mysterious desync twenty seconds into a fight.
+ */
+
+/** Bigger than any CPS-1/2 romset, small enough that a bad actor cannot OOM us. */
+export const MAX_ROM_BYTES = 64 * 1024 * 1024;
+
+/** Chunks per tick. 8 x 16KB is 128KB a turn — under a millisecond of copying. */
+const CHUNKS_PER_TICK = 8;
+
+/** A transfer this slow is a dead peer, not a slow one. */
+const TRANSFER_TIMEOUT_MS = 60_000;
+
+export interface RomOffer {
+  name: string;
+  bytes: number;
+  sha256: string;
+}
+
+export interface RomShareCallbacks {
+  /** A complete, fingerprint-checked file arrived. */
+  onReceived: (rom: RomSource) => void;
+  /** Sending or receiving progress, 0..1, or null when nothing is in flight. */
+  onProgress: (fraction: number | null, detail: string) => void;
+}
+
+/** Web Crypto is https-or-localhost only; without it we simply do not compare. */
+export async function fingerprint(bytes: Uint8Array): Promise<string> {
+  if (!globalThis.crypto?.subtle) return '';
+  const view = new Uint8Array(bytes); // a fresh, non-shared buffer for digest()
+  const digest = await crypto.subtle.digest('SHA-256', view);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export class RomShare {
+  readonly #transport: Transport;
+  readonly #log: Log;
+  readonly #cb: RomShareCallbacks;
+  readonly #assembler = new StateAssembler();
+
+  /** What we hold, once we have it — this is what we can offer others. */
+  #mine: RomSource | null = null;
+  #mineHash = '';
+  /** Offers we have been given, by peer, so we know who to ask. */
+  #offers = new Map<PeerId, RomOffer>();
+  #requested = false;
+  #receiving: { from: PeerId; offer: RomOffer; startedAt: number } | null = null;
+  #unsubscribes: Array<() => void> = [];
+
+  constructor(transport: Transport, log: Log, cb: RomShareCallbacks) {
+    this.#transport = transport;
+    this.#log = log;
+    this.#cb = cb;
+    // Subscribes itself, the way Netplay does, rather than making main.ts a
+    // switchboard that has to know which messages belong to whom.
+    this.#unsubscribes.push(
+      transport.onInput((from, bytes) => this.#onWire(from, bytes)),
+      transport.onControl((from, msg) => this.onControl(from, msg)),
+    );
+  }
+
+  /** Called once we have a file of our own, however we came by it. */
+  async setMine(rom: RomSource): Promise<void> {
+    this.#mine = rom;
+    this.#mineHash = await fingerprint(rom.bytes);
+    this.#requested = false;
+    this.#receiving = null;
+    this.#cb.onProgress(null, '');
+    this.offerTo();
+  }
+
+  get offer(): RomOffer | null {
+    if (!this.#mine) return null;
+    return { name: this.#mine.name, bytes: this.#mine.bytes.length, sha256: this.#mineHash };
+  }
+
+  /** Announce what we hold. To one peer, or to everyone when `to` is omitted. */
+  offerTo(to?: PeerId): void {
+    const offer = this.offer;
+    if (!offer) return;
+    this.#transport.sendControl({ t: 'rom-offer', ...offer }, to);
+  }
+
+  /**
+   * Whether anyone has offered us something, and from whom.
+   *
+   * Preferring the first offer is fine: in a room where the host loaded a game,
+   * that is the host, and in a room where two peers loaded the same game their
+   * fingerprints match anyway.
+   */
+  get available(): { from: PeerId; offer: RomOffer } | null {
+    for (const [from, offer] of this.#offers) return { from, offer };
+    return null;
+  }
+
+  /** Ask whoever has offered. Idempotent — a second call while one is in flight
+   *  is ignored rather than starting a second transfer. */
+  request(): boolean {
+    if (this.#mine || this.#requested) return false;
+    const source = this.available;
+    if (!source) return false;
+    this.#requested = true;
+    this.#receiving = { from: source.from, offer: source.offer, startedAt: Date.now() };
+    this.#log.info('asking a peer for their game file', {
+      from: source.from,
+      name: source.offer.name,
+      bytes: source.offer.bytes,
+    });
+    this.#cb.onProgress(0, `asking for ${source.offer.name}…`);
+    this.#transport.sendControl({ t: 'rom-request' }, source.from);
+    return true;
+  }
+
+  onControl(from: PeerId, msg: ControlMessage): void {
+    switch (msg.t) {
+      case 'rom-offer': {
+        const offer = { name: String(msg.name), bytes: Number(msg.bytes), sha256: String(msg.sha256) };
+        if (!Number.isFinite(offer.bytes) || offer.bytes <= 0 || offer.bytes > MAX_ROM_BYTES) return;
+        this.#offers.set(from, offer);
+        // Both of us already have a file: say so now rather than letting the
+        // desync counter discover it mid-fight.
+        if (this.#mine && this.#mineHash && offer.sha256 && offer.sha256 !== this.#mineHash) {
+          this.#log.warn('a peer is running a different dump of this game', {
+            from,
+            theirs: offer.name,
+            mine: this.#mine.name,
+          });
+        }
+        /*
+         * A guest finishes booting its core well before the host's offer lands,
+         * so the request cannot only be made at boot — it would always lose that
+         * race and fall through to the picker. Asking here instead means the
+         * offer itself is the trigger, whichever order the two arrive in.
+         */
+        this.request();
+        return;
+      }
+      case 'rom-request': {
+        if (!this.#mine) {
+          this.#transport.sendControl({ t: 'rom-decline', reason: 'I have no game loaded' }, from);
+          return;
+        }
+        void this.#send(from, this.#mine.bytes);
+        return;
+      }
+      case 'rom-decline': {
+        this.#log.warn('a peer could not send their game file', { from, reason: msg.reason });
+        this.#requested = false;
+        this.#receiving = null;
+        this.#cb.onProgress(null, msg.reason);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /** Peer left: drop its offer, and abandon a transfer that was coming from it. */
+  forget(peerId: PeerId): void {
+    this.#offers.delete(peerId);
+    if (this.#receiving?.from === peerId) {
+      this.#receiving = null;
+      this.#requested = false;
+      this.#cb.onProgress(null, 'the peer sending your game file left');
+    }
+  }
+
+  dispose(): void {
+    for (const off of this.#unsubscribes) off();
+    this.#unsubscribes = [];
+    this.#offers.clear();
+    this.#receiving = null;
+  }
+
+  /**
+   * Push the file out in paced batches.
+   *
+   * The yield between batches is the whole point — see the class comment. A
+   * `setTimeout(0)` lets the audio-clock tick, the renderer and any input
+   * packets through between turns.
+   */
+  async #send(to: PeerId, bytes: Uint8Array): Promise<void> {
+    const transferId = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
+    const chunks = [...chunkRom(transferId, bytes)];
+    this.#log.info('sending our game file to a peer', { to, bytes: bytes.length, chunks: chunks.length });
+    for (let i = 0; i < chunks.length; i += CHUNKS_PER_TICK) {
+      for (const chunk of chunks.slice(i, i + CHUNKS_PER_TICK)) {
+        this.#transport.sendInput(chunk, to);
+      }
+      const done = Math.min(i + CHUNKS_PER_TICK, chunks.length);
+      this.#cb.onProgress(done / chunks.length, `sending ${Math.round((done / chunks.length) * 100)}%`);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    this.#cb.onProgress(null, '');
+    this.#log.info('game file sent', { to });
+  }
+
+  #onWire(from: PeerId, bytes: Uint8Array): void {
+    const chunk = decodeRomChunk(bytes);
+    if (!chunk) return;
+    const receiving = this.#receiving;
+    // Unsolicited, or from someone we did not ask: a peer does not get to push
+    // megabytes at us because it felt like it.
+    if (!receiving || receiving.from !== from) return;
+    if (chunk.totalBytes > MAX_ROM_BYTES) return;
+    if (Date.now() - receiving.startedAt > TRANSFER_TIMEOUT_MS) {
+      this.#receiving = null;
+      this.#requested = false;
+      this.#cb.onProgress(null, 'that transfer took too long, try loading a file yourself');
+      return;
+    }
+
+    const complete = this.#assembler.accept(chunk);
+    const { have, want } = this.#assembler.progress;
+    if (!complete) {
+      this.#cb.onProgress(have / Math.max(want, 1), `receiving ${have}/${want}`);
+      return;
+    }
+    void this.#accept(complete, receiving.offer);
+  }
+
+  async #accept(bytes: Uint8Array, offer: RomOffer): Promise<void> {
+    const hash = await fingerprint(bytes);
+    if (offer.sha256 && hash && hash !== offer.sha256) {
+      this.#log.error('the game file we received does not match what was offered', {
+        expected: offer.sha256.slice(0, 12),
+        got: hash.slice(0, 12),
+      });
+      this.#receiving = null;
+      this.#requested = false;
+      this.#cb.onProgress(null, 'that file arrived damaged — load one yourself');
+      return;
+    }
+    this.#log.info('game file received from a peer', { name: offer.name, bytes: bytes.length });
+    this.#receiving = null;
+    this.#cb.onProgress(null, '');
+    this.#cb.onReceived({ name: offer.name, bytes, origin: 'peer' });
+  }
+}

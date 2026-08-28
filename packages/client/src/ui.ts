@@ -94,6 +94,7 @@ export class UI {
   readonly #stageMessage = must<HTMLElement>('stage-message');
   readonly #romPicker = must<HTMLElement>('rom-picker');
   readonly #romFile = must<HTMLInputElement>('rom-file');
+  readonly #romProgress = must<HTMLElement>('rom-progress');
   readonly #hud = must<HTMLElement>('emu-hud');
   readonly #netHud = must<HTMLElement>('net-hud');
   readonly #dialog = must<HTMLDialogElement>('identity-modal');
@@ -635,6 +636,20 @@ export class UI {
     this.#stageMessage.hidden = false;
     this.#screen.hidden = true;
     this.#btnFull.hidden = true;
+  }
+
+  /**
+   * Progress for a game file coming from, or going to, a peer.
+   *
+   * Deliberately additive to the picker rather than replacing it: a transfer can
+   * fail or the peer can leave, and a player left staring at a stalled bar with
+   * no way to load their own file would be worse off than before the feature.
+   */
+  showRomProgress(fraction: number | null, detail: string): void {
+    this.#romProgress.hidden = fraction === null && !detail;
+    this.#romProgress.textContent = detail;
+    if (fraction === null) this.#romProgress.style.removeProperty('--fraction');
+    else this.#romProgress.style.setProperty('--fraction', `${Math.round(fraction * 100)}%`);
   }
 
   showRomPicker(show: boolean): void {

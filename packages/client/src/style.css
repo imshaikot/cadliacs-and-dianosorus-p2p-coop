@@ -630,6 +630,22 @@ input:focus {
 .rom-bar input { background: transparent; box-shadow: none; padding: 0; font-size: 12px; }
 .rom-why { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.6; }
 
+/* A transfer in flight. The bar is the element's own background, filled to
+   --fraction, so there is no second node to keep in step with the label. */
+.rom-progress[hidden] { display: none; }
+.rom-progress {
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  border-radius: 2px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--ink);
+  background:
+    linear-gradient(90deg, rgba(71, 171, 92, 0.45) var(--fraction, 0%), transparent var(--fraction, 0%)),
+    #1b1a21;
+  transition: background 120ms linear;
+}
+
 .hud {
   margin: 0.5rem 0 0;
   font-family: var(--font-data);

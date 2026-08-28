@@ -169,8 +169,10 @@
                 <input type="file" id="rom-file" accept=".zip,application/zip" />
                 <p class="rom-why">
                   This player ships no games. Load a CPS-1 or CPS-2 romset zip you
-                  are entitled to use — the driver is read from the filename.
+                  are entitled to use — the driver is read from the filename. If
+                  someone in the room already has one, it will be sent to you.
                 </p>
+                <p class="rom-progress" id="rom-progress" hidden aria-live="polite"></p>
               </div>
             </div>
             <button class="btn btn-quiet stage-btn" id="btn-fullscreen" type="button" hidden

@@ -20,6 +20,10 @@
  * `voice` message. Strictly speaking a v1 peer could ignore both and still
  * play — but it would show up nameless, with a default avatar, unable to be
  * heard. The clean rejection the version check already produces beats that.
+ *
+ * v3 added the room's `capacity` to `welcome` and the `rom-*` messages. A v2
+ * peer would count the lobby to the wrong number and could neither offer a game
+ * file nor be told the host's fingerprint, so again: reject, do not limp.
  */
 export const PROTOCOL_VERSION = 3;
 
@@ -88,8 +92,21 @@ export type ControlMessage =
    * and stays clear of the membership machinery entirely.
    */
   | { t: 'voice'; muted: boolean }
-  /** guest -> host: my core is up and I have a ROM, deal me in. */
+  /** guest -> host: my core is up and I have a game file, deal me in. */
   | { t: 'ready'; port: number }
+  /**
+   * host -> guest: I have a game loaded, and here is what it is.
+   *
+   * `sha256` is the point of this message even when nobody wants the bytes: two
+   * peers running different dumps of the same romset diverge, and the desync
+   * counter would report it a minute later with no clue why. Comparing the
+   * fingerprint at the door turns that into a sentence.
+   */
+  | { t: 'rom-offer'; name: string; bytes: number; sha256: string }
+  /** guest -> host: I have no game file, send me yours. */
+  | { t: 'rom-request' }
+  /** host -> guest: I cannot, and this is why. */
+  | { t: 'rom-decline'; reason: string }
   /**
    * host -> everyone: the membership of the game is changing.
    *
@@ -138,6 +155,9 @@ export function decodeControl(raw: unknown): ControlMessage | null {
     case 'begun':
     case 'desync':
     case 'voice':
+    case 'rom-offer':
+    case 'rom-request':
+    case 'rom-decline':
     case 'chat':
       return parsed as ControlMessage;
     default:

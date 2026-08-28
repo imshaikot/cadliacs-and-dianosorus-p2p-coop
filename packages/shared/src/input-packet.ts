@@ -9,6 +9,7 @@ export const WireKind = {
   Input: 0x01,
   StateChunk: 0x02,
   Checksum: 0x03,
+  RomChunk: 0x04,
 } as const;
 
 export const INPUT_HEADER_BYTES = 7;
@@ -64,7 +65,16 @@ export interface StateChunk {
   payload: Uint8Array;
 }
 
-export function encodeStateChunk(
+/**
+ * One chunk format, two payloads.
+ *
+ * Savestates and game files are the same problem — a few hundred kilobytes to a
+ * few megabytes of opaque bytes that has to survive an unordered channel — so
+ * they share a header and differ only in the leading kind byte. `count` is a
+ * uint16, which caps a transfer at 65535 chunks, or a gigabyte.
+ */
+function encodeChunk(
+  kind: number,
   transferId: number,
   index: number,
   count: number,
@@ -73,7 +83,7 @@ export function encodeStateChunk(
 ): Uint8Array {
   const buf = new Uint8Array(STATE_CHUNK_HEADER_BYTES + payload.length);
   const view = new DataView(buf.buffer);
-  buf[0] = WireKind.StateChunk;
+  buf[0] = kind;
   view.setUint32(1, transferId >>> 0, true);
   view.setUint16(5, index, true);
   view.setUint16(7, count, true);
@@ -82,8 +92,8 @@ export function encodeStateChunk(
   return buf;
 }
 
-export function decodeStateChunk(bytes: Uint8Array): StateChunk | null {
-  if (bytes.length < STATE_CHUNK_HEADER_BYTES || bytes[0] !== WireKind.StateChunk) return null;
+function decodeChunk(kind: number, bytes: Uint8Array): StateChunk | null {
+  if (bytes.length < STATE_CHUNK_HEADER_BYTES || bytes[0] !== kind) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return {
     transferId: view.getUint32(1, true),
@@ -94,20 +104,42 @@ export function decodeStateChunk(bytes: Uint8Array): StateChunk | null {
   };
 }
 
-/** Splits a savestate into chunks. Order does not matter to the receiver. */
-export function* chunkState(transferId: number, state: Uint8Array): Generator<Uint8Array> {
-  const count = Math.ceil(state.length / STATE_CHUNK_PAYLOAD);
+function* chunkBytes(kind: number, transferId: number, data: Uint8Array): Generator<Uint8Array> {
+  const count = Math.ceil(data.length / STATE_CHUNK_PAYLOAD);
   for (let i = 0; i < count; i += 1) {
     const start = i * STATE_CHUNK_PAYLOAD;
-    yield encodeStateChunk(
+    yield encodeChunk(
+      kind,
       transferId,
       i,
       count,
-      state.length,
-      state.subarray(start, Math.min(start + STATE_CHUNK_PAYLOAD, state.length)),
+      data.length,
+      data.subarray(start, Math.min(start + STATE_CHUNK_PAYLOAD, data.length)),
     );
   }
 }
+
+export const encodeStateChunk = (
+  transferId: number,
+  index: number,
+  count: number,
+  totalBytes: number,
+  payload: Uint8Array,
+): Uint8Array => encodeChunk(WireKind.StateChunk, transferId, index, count, totalBytes, payload);
+
+export const decodeStateChunk = (bytes: Uint8Array): StateChunk | null =>
+  decodeChunk(WireKind.StateChunk, bytes);
+
+/** Splits a savestate into chunks. Order does not matter to the receiver. */
+export const chunkState = (transferId: number, state: Uint8Array): Generator<Uint8Array> =>
+  chunkBytes(WireKind.StateChunk, transferId, state);
+
+export const decodeRomChunk = (bytes: Uint8Array): StateChunk | null =>
+  decodeChunk(WireKind.RomChunk, bytes);
+
+/** Splits a game file into chunks. Paced by the sender, not by this generator. */
+export const chunkRom = (transferId: number, rom: Uint8Array): Generator<Uint8Array> =>
+  chunkBytes(WireKind.RomChunk, transferId, rom);
 
 export const CHECKSUM_BYTES = 10;
 
@@ -141,7 +173,18 @@ export function decodeChecksum(bytes: Uint8Array): ChecksumMessage | null {
   return { port: bytes[1] ?? 0, frame: view.getUint32(2, true), hash: view.getUint32(6, true) };
 }
 
-/** Reassembles chunks that may arrive in any order. */
+/**
+ * Reassembles a chunked transfer, whatever kind it carries.
+ *
+ * It holds one transfer at a time: a chunk with a new transferId abandons the
+ * previous buffer, which is right for savestates (a newer resync supersedes an
+ * older one) and right for game files (there is only ever one in flight).
+ *
+ * It deliberately does not ask for missing chunks. Both channels retransmit in
+ * practice — see the `verdict` line the transport logs — so a chunk that never
+ * arrives means the peer is gone, and that is the timeout's problem, not this
+ * class's. Callers that care watch `progress` and give up.
+ */
 export class StateAssembler {
   #transferId = -1;
   #buffer: Uint8Array | null = null;
