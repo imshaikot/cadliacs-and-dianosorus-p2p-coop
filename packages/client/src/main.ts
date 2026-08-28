@@ -71,14 +71,26 @@ log.info('ready', { broker: config.brokerDescription, iceServers: config.broker.
 /**
  * Routes.
  *
- * A `#/join/CODE` link only *prefills* the field — it deliberately does not join
- * on its own. Gotcha #6 wants a real user gesture before anything starts, since
+ * A `#/join/CODE` link opens the join dialog with the code already applied, so
+ * a guest lands one click from the room — but it deliberately does not join on
+ * its own. Gotcha #6 wants a real user gesture before anything starts, since
  * from M2 onward that gesture is what unblocks audio, and a link that opened a
- * microphone prompt on page load would be worse than one extra click.
+ * microphone prompt on page load would be worse than one click. Confirming the
+ * dialog is that gesture.
  *
  * The room route exists so a refresh mid-game lands you back on the landing page
  * with the code already filled in, rather than on a blank one.
  */
+function joinFrom(raw: string): void {
+  const code = normalizeRoomCode(raw);
+  if (code) {
+    ui.openGuestJoin(code);
+    log.info('join link opened, confirm the dialog to connect', { code });
+  } else {
+    ui.showError('The room code in that link is malformed.');
+  }
+}
+
 function prefillFrom(raw: string): void {
   const code = normalizeRoomCode(raw);
   if (code) {
@@ -90,9 +102,11 @@ function prefillFrom(raw: string): void {
 }
 
 const router = new Router()
-  .on('/join/:code', ({ code }) => prefillFrom(code ?? ''))
+  .on('/join/:code', ({ code }) => joinFrom(code ?? ''))
   .on('/room/:code', ({ code }) => prefillFrom(code ?? ''))
-  .otherwise(() => {});
+  // A session outranks the author page — see showAuthorView.
+  .on('/author', () => ui.showAuthorView(true))
+  .otherwise(() => ui.showAuthorView(false));
 
 // Links from before the router used `?join=CODE`. Rewrite rather than drop them:
 // somebody's chat history is not a good place to break a URL.

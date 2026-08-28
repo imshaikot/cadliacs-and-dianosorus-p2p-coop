@@ -36,7 +36,12 @@ try {
   // --- a link a friend pasted ----------------------------------------------
   const hash = await open('HASH', `${APP}#/join/QG2C-0MHS-0EMM`);
   check(
-    '#/join/:code prefills the code field',
+    '#/join/:code opens the join dialog directly',
+    (await hash.eval('document.getElementById("identity-modal").open')) === true,
+    'a guest from a link should be one click from the room',
+  );
+  check(
+    'with the code already applied',
     (await hash.eval('document.getElementById("input-code").value')) === 'QG2C-0MHS-0EMM',
   );
   // Deliberately does NOT auto-join: gotcha #6 wants a real gesture first.
@@ -44,6 +49,14 @@ try {
     'and does not join on its own',
     (await hash.eval('window.__retro.snapshot().status')) !== 'ready',
     'a link that opened a microphone prompt on load would be worse than one click',
+  );
+  // Backing out of the dialog must not strand the guest in a dead end.
+  await hash.clickSelector('#btn-identity-cancel');
+  check(
+    'cancelling the dialog lands on the landing page, code intact',
+    (await hash.eval(
+      '!document.getElementById("identity-modal").open && !document.getElementById("view-landing").hidden',
+    )) === true,
   );
 
   // --- a link from before the router ---------------------------------------
