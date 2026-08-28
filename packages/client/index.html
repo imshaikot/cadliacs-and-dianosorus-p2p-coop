@@ -98,6 +98,17 @@
             <p class="field">Pick a token</p>
             <div class="avatar-grid" id="avatar-grid" role="radiogroup" aria-label="Pick a token"></div>
 
+            <!--
+              Host only, and presets rather than a number field: the room is
+              bounded by MAX_PLAYERS either way, and a free input would only ever
+              be a chance to type something that gets clamped back.
+            -->
+            <div class="capacity" id="capacity-block" hidden>
+              <p class="field" id="capacity-label">How many players</p>
+              <div class="capacity-grid" id="capacity-grid" role="radiogroup"
+                   aria-labelledby="capacity-label"></div>
+            </div>
+
             <p class="mic-note" id="identity-note">
               your browser will ask for the microphone. you join <b>muted</b> —
               press <kbd>M</kbd> to talk.

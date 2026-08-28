@@ -21,18 +21,50 @@
  * play — but it would show up nameless, with a default avatar, unable to be
  * heard. The clean rejection the version check already produces beats that.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Player 1 is always the host (it owns the emulator). Guests fill 2 and 3. */
 export type PlayerSlot = 1 | 2 | 3;
+
+/**
+ * The hard ceiling, which sizes the timeline and lockstep buffers.
+ *
+ * A room's *capacity* is a separate thing the host picks when it opens the room,
+ * and is never larger than this. The distinction matters: capacity is a social
+ * choice ("just the two of us"), MAX_PLAYERS is what the arrays were allocated
+ * for, and conflating them would let a roster message resize a Uint16Array.
+ */
 export const MAX_PLAYERS = 3;
 export const GUEST_SLOTS: readonly PlayerSlot[] = [2, 3];
+
+/** What the host may choose. Presets, not free input — see coerceCapacity. */
+export const CAPACITY_CHOICES: readonly number[] = [2, 3];
+export const DEFAULT_CAPACITY = 3;
+
+/**
+ * A remote machine controls this number, so it goes through here before it is
+ * allowed anywhere near a slot allocation.
+ */
+export function coerceCapacity(value: unknown): number {
+  return typeof value === 'number' && CAPACITY_CHOICES.includes(value) ? value : DEFAULT_CAPACITY;
+}
 
 export type ControlMessage =
   /** guest -> host, first thing sent on the control channel. */
   | { t: 'hello'; protocol: number; label: string; avatar: string }
-  /** host -> guest, in reply to hello. `slot` is the emulator port to drive. */
-  | { t: 'welcome'; protocol: number; slot: PlayerSlot; label: string; avatar: string }
+  /**
+   * host -> guest, in reply to hello. `slot` is the emulator port to drive, and
+   * `capacity` is how many the host opened the room for, so a guest can show
+   * "2 of 2" rather than always counting up to MAX_PLAYERS.
+   */
+  | {
+      t: 'welcome';
+      protocol: number;
+      slot: PlayerSlot;
+      label: string;
+      avatar: string;
+      capacity: number;
+    }
   /** host -> guest, when the room is full or the protocol does not match. */
   | { t: 'reject'; reason: string }
   /** either direction, on deliberate teardown. */

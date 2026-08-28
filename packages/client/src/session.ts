@@ -1,11 +1,12 @@
 import {
+  DEFAULT_CAPACITY,
   GUEST_SLOTS,
-  MAX_PLAYERS,
   PROTOCOL_VERSION,
   PeerJsTransport,
   Signal,
   DEFAULT_AVATAR,
   coerceAvatar,
+  coerceCapacity,
   coerceName,
   formatRoomCode,
 } from '@retro/shared';
@@ -52,6 +53,9 @@ export interface SessionOptions {
   broker: BrokerConfig;
   label: string;
   avatar: AvatarId;
+  /** How many players the host is opening the room for. Ignored for a guest,
+   *  which learns the number from the host's `welcome`. */
+  capacity?: number;
   log: Log;
 }
 
@@ -83,6 +87,8 @@ export class Session {
   #selfSlot: PlayerSlot | null = null;
   #rejectedReason: string | null = null;
   #roomCode: string;
+  /** Host: what was chosen at the door. Guest: what the host said in `welcome`. */
+  #capacity: number = DEFAULT_CAPACITY;
   #status: TransportStatus = 'idle';
   #unsubscribes: Unsubscribe[] = [];
 
@@ -100,6 +106,7 @@ export class Session {
     // slot is known and `P2` beats anything we could invent here.
     this.#label = coerceName(options.label) || 'player';
     this.#avatar = coerceAvatar(options.avatar);
+    this.#capacity = coerceCapacity(options.capacity);
     this.#roomCode = options.roomCode;
     this.#transport = new PeerJsTransport({
       role: options.role,
@@ -123,6 +130,10 @@ export class Session {
   }
   get selfSlot(): PlayerSlot | null {
     return this.#selfSlot;
+  }
+  /** How many this room was opened for — what the lobby counts up to. */
+  get capacity(): number {
+    return this.#capacity;
   }
   get status(): TransportStatus {
     return this.#status;
@@ -266,7 +277,7 @@ export class Session {
         }
         const slot = this.#allocateSlot();
         if (slot === null) {
-          const reason = `room is full (${MAX_PLAYERS} players)`;
+          const reason = `room is full (${this.#capacity} players)`;
           this.#log.warn('rejecting guest', { peerId: from, reason });
           this.#transport.sendControl({ t: 'reject', reason }, from);
           this.#transport.disconnectPeer(from, reason);
@@ -288,6 +299,7 @@ export class Session {
             slot,
             label: this.#label,
             avatar: this.#avatar,
+            capacity: this.#capacity,
           },
           from,
         );
@@ -298,6 +310,7 @@ export class Session {
       case 'welcome': {
         if (this.role !== 'guest' || this.#selfId === null) return;
         this.#selfSlot = msg.slot;
+        this.#capacity = coerceCapacity(msg.capacity);
         const host = this.#players.get(from);
         if (host) {
           host.label = nameOr(msg.label, HOST_SLOT);
@@ -414,7 +427,16 @@ export class Session {
     this.roster.emit(this.players);
   }
 
+  /**
+   * The next free guest slot, or null when the room is full.
+   *
+   * Bounded by the room's capacity rather than MAX_PLAYERS: the buffers are
+   * always sized for the ceiling, but a host who opened a two-player room means
+   * two, and the third guest should be turned away at the door rather than seated
+   * in a slot nobody expected.
+   */
   #allocateSlot(): PlayerSlot | null {
+    if (this.#players.size >= this.#capacity) return null;
     const taken = new Set([...this.#players.values()].map((p) => p.slot));
     for (const slot of GUEST_SLOTS) {
       if (!taken.has(slot)) return slot;

@@ -1,8 +1,10 @@
 import {
   AVATAR_IDS,
+  CAPACITY_CHOICES,
   DEFAULT_AVATAR,
-  MAX_PLAYERS,
+  DEFAULT_CAPACITY,
   coerceAvatar,
+  coerceCapacity,
   coerceName,
   formatRoomCode,
 } from '@retro/shared';
@@ -22,6 +24,7 @@ const IDLE_MS = 2500;
 /** So a returning player does not retype their name every session. */
 const STORE_NAME = 'retro.name';
 const STORE_AVATAR = 'retro.avatar';
+const STORE_CAPACITY = 'retro.capacity';
 
 /** localStorage throws outright in a locked-down profile; a name is not worth it. */
 function remember(key: string, value: string): void {
@@ -49,6 +52,8 @@ function must<T extends Element>(id: string): T {
 export interface Identity {
   name: string;
   avatar: AvatarId;
+  /** Host only. A guest's copy is ignored — the host's `welcome` decides. */
+  capacity: number;
 }
 
 export interface UICallbacks {
@@ -98,6 +103,8 @@ export class UI {
   readonly #identityNote = must<HTMLElement>('identity-note');
   readonly #nameInput = must<HTMLInputElement>('input-name');
   readonly #avatarGrid = must<HTMLElement>('avatar-grid');
+  readonly #capacityBlock = must<HTMLElement>('capacity-block');
+  readonly #capacityGrid = must<HTMLElement>('capacity-grid');
   readonly #btnIdentityGo = must<HTMLButtonElement>('btn-identity-go');
   readonly #btnIdentityCancel = must<HTMLButtonElement>('btn-identity-cancel');
   readonly #avatarDefs = must<SVGSVGElement>('avatar-defs');
@@ -116,10 +123,13 @@ export class UI {
   #micAvailable = false;
   #micBusy = false;
   #speakingIds = new Set<string>();
+  /** What the lobby counts up to. The host picks it; a guest is told it. */
+  #capacity = DEFAULT_CAPACITY;
 
   constructor(cb: UICallbacks) {
     this.#avatarDefs.innerHTML = avatarDefs();
     this.#buildAvatarGrid();
+    this.#buildCapacityGrid();
     this.#restoreIdentity();
 
     this.#btnHost.addEventListener('click', () => this.#openIdentity('host', ''));
@@ -149,8 +159,12 @@ export class UI {
       if (!pending) return;
       remember(STORE_NAME, identity.name);
       remember(STORE_AVATAR, identity.avatar);
-      if (pending.role === 'host') cb.onHost(identity);
-      else cb.onJoin(pending.code, identity);
+      if (pending.role === 'host') {
+        remember(STORE_CAPACITY, String(identity.capacity));
+        cb.onHost(identity);
+      } else {
+        cb.onJoin(pending.code, identity);
+      }
     });
 
     // The lobby is rebuilt whole on every roster change, so its buttons cannot
@@ -279,16 +293,57 @@ export class UI {
     );
   }
 
+  /** Same radio-group shape as the avatars, so keyboard behaviour matches. */
+  #buildCapacityGrid(): void {
+    this.#capacityGrid.replaceChildren(
+      ...CAPACITY_CHOICES.map((n) => {
+        const label = document.createElement('label');
+        label.className = 'capacity-pick';
+        label.dataset['capacity'] = String(n);
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'capacity';
+        input.value = String(n);
+        input.checked = n === DEFAULT_CAPACITY;
+        const big = document.createElement('span');
+        big.className = 'capacity-n';
+        big.textContent = String(n);
+        const word = document.createElement('span');
+        word.className = 'capacity-word';
+        word.textContent = 'players';
+        label.append(input, big, word);
+        return label;
+      }),
+    );
+  }
+
+  #selectCapacity(n: number): void {
+    const input = this.#capacityGrid.querySelector<HTMLInputElement>(`input[value="${n}"]`);
+    if (input) input.checked = true;
+  }
+
+  /** Called once the room exists, so the lobby counts to the host's number. */
+  setCapacity(n: number): void {
+    this.#capacity = coerceCapacity(n);
+    this.renderRoster(this.#players, this.#audibleFor);
+  }
+
   #restoreIdentity(): void {
     this.#nameInput.value = coerceName(recall(STORE_NAME));
     this.selectAvatar(coerceAvatar(recall(STORE_AVATAR) || DEFAULT_AVATAR));
+    this.#selectCapacity(coerceCapacity(Number(recall(STORE_CAPACITY)) || DEFAULT_CAPACITY));
     this.#syncIdentityForm();
   }
 
   /** What the dialog currently holds, cleaned the same way the wire cleans it. */
   get identity(): Identity {
     const checked = this.#avatarGrid.querySelector<HTMLInputElement>('input:checked');
-    return { name: coerceName(this.#nameInput.value), avatar: coerceAvatar(checked?.value) };
+    const cap = this.#capacityGrid.querySelector<HTMLInputElement>('input:checked');
+    return {
+      name: coerceName(this.#nameInput.value),
+      avatar: coerceAvatar(checked?.value),
+      capacity: coerceCapacity(Number(cap?.value)),
+    };
   }
 
   selectAvatar(id: AvatarId): void {
@@ -302,6 +357,8 @@ export class UI {
     this.#identityError.textContent = '';
     this.#identityTitle.textContent = role === 'host' ? 'WHO ARE YOU' : 'WHO IS JOINING';
     this.#btnIdentityGo.textContent = role === 'host' ? 'HOST A GAME' : 'JOIN GAME';
+    // Only the host opens the room, so only the host chooses its size.
+    this.#capacityBlock.hidden = role !== 'host';
     this.#syncIdentityForm();
     this.#dialog.showModal();
     this.#nameInput.focus();
@@ -405,7 +462,7 @@ export class UI {
     this.#players = players;
     this.#audibleFor = audibleFor;
     this.#lobbyCount.textContent = players.length
-      ? `${players.length} of ${MAX_PLAYERS} players`
+      ? `${players.length} of ${this.#capacity} players`
       : 'waiting for players';
     this.#roster.replaceChildren(...players.map((p) => this.#playerCard(p, audibleFor)));
     this.renderSpeaking(this.#speakingIds);

@@ -1,4 +1,4 @@
-import { generateRoomCode, normalizeRoomCode } from '@retro/shared';
+import { DEFAULT_CAPACITY, generateRoomCode, normalizeRoomCode } from '@retro/shared';
 import type { ChannelDiagnostics, PeerStats, PeerId } from '@retro/shared';
 
 import { loadConfig } from './config.js';
@@ -141,6 +141,7 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
     broker: config.broker,
     label: identity.name,
     avatar: identity.avatar,
+    capacity: identity.capacity,
     log,
   });
   session = next;
@@ -149,6 +150,9 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
   ui.setMicAvailable(mic.canTalk);
 
   next.roster.on((players) => {
+    // A guest only learns the room's size from the host's `welcome`, which
+    // lands before the first roster, so this is the earliest honest moment.
+    ui.setCapacity(next.capacity);
     // Voice only measures peers the room says are unmuted; see setPeerMuted.
     for (const p of players) if (!p.isSelf) mic.setPeerMuted(p.peerId, p.muted);
     ui.renderRoster(players, (id) => mic.isPeerAudible(id));
@@ -488,5 +492,6 @@ if (import.meta.env.DEV) {
   // Bypasses the identity dialog on purpose: this exists to exercise the
   // broker's ID-collision path, and typing a name into a modal is not part of
   // what it is testing.
-  window.__retro.forceHost = (code) => begin('host', code, { name: 'squatter', avatar: 'skull' });
+  window.__retro.forceHost = (code) =>
+    begin('host', code, { name: 'squatter', avatar: 'skull', capacity: DEFAULT_CAPACITY });
 }

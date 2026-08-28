@@ -22,8 +22,9 @@
     "verify:m4": "node tools/verify/verify-m4.mjs",
     "verify:m6": "node tools/verify/verify-m6.mjs",
     "verify:router": "node tools/verify/verify-router.mjs",
+    "verify:capacity": "node tools/verify/verify-capacity.mjs",
     "verify:fullscreen": "node tools/verify/verify-fullscreen.mjs",
-    "verify": "yarn verify:m0 && yarn verify:m1 && yarn verify:m2 && yarn verify:m3 && yarn verify:m4 && yarn verify:m6 && yarn verify:router && yarn verify:fullscreen",
+    "verify": "yarn verify:m0 && yarn verify:m1 && yarn verify:m2 && yarn verify:m3 && yarn verify:m4 && yarn verify:m6 && yarn verify:router && yarn verify:capacity && yarn verify:fullscreen",
     "verify:prod": "node --env-file-if-exists=.env tools/verify/verify-prod.mjs",
     "deploy": "bash scripts/deploy.sh"
   },
