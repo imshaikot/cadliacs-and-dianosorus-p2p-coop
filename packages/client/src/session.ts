@@ -341,7 +341,12 @@ export class Session {
         return;
       }
       case 'bye': {
+        // A goodbye is authoritative: the peer is gone the moment it says so.
+        // Waiting for the channel-close or ICE events instead costs seconds —
+        // seconds a lockstep game spends frozen for everyone still in it — so
+        // the player is dropped here, which resyncs the survivors immediately.
         this.#log.net('peer said goodbye', { peerId: from, reason: msg.reason });
+        this.#transport.disconnectPeer(from, `bye: ${msg.reason}`);
         return;
       }
       case 'voice': {
