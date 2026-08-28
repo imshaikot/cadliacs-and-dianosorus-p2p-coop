@@ -60,7 +60,7 @@ try {
     'guest emulator running',
   );
   check('guest boots its OWN emulator, not a video feed', guestBoot.emulator.running === true);
-  check('guest loaded its own ROM', guest.console.some((c) => /ROM loaded/.test(c.text)));
+  check('guest loaded a game file of its own', guest.console.some((c) => /game file loaded/.test(c.text)));
   check('guest was seated as player 2', guestBoot.selfSlot === 2, `slot ${guestBoot.selfSlot}`);
 
   // --- both reach lockstep -------------------------------------------------
