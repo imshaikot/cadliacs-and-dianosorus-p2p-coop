@@ -147,9 +147,16 @@ try {
     describe(rosters.g2),
   );
 
-  const rosterText = await host.eval('document.getElementById("roster").textContent');
+  /*
+   * Read the name cells, not the roster's whole textContent. Concatenated it
+   * comes out as "P1Adayou are muted<peer-id>…", where a word-boundary match
+   * cannot anchor and a substring match can collide with a hex peer id.
+   */
+  const shownNames = await host.eval(
+    '[...document.querySelectorAll("#roster .who")].map((e) => e.textContent)',
+  );
   check('the names are on the page, not just in the model',
-    /\bAda\b/.test(rosterText) && /\bCy\b/.test(rosterText), rosterText.replace(/\s+/g, ' ').slice(0, 140));
+    shownNames.includes('Ada') && shownNames.includes('Cy'), shownNames.join(' | '));
   const rosterAvatars = await host.eval(
     '[...document.querySelectorAll("#roster use")].map((u) => u.getAttribute("href")).join(",")',
   );
