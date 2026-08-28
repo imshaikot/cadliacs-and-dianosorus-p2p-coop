@@ -27,7 +27,7 @@ REPO=$(basename -s .git "$(git remote get-url "$REMOTE")")
 BASE="/${REPO}/"
 
 echo "==> building with base ${BASE}"
-yarn workspace @dino/client build --base="${BASE}"
+yarn workspace @retro/client build --base="${BASE}"
 
 DIST="${ROOT}/packages/client/dist"
 [ -d "$DIST" ] || { echo "no build output at $DIST" >&2; exit 1; }
