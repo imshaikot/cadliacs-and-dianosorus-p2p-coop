@@ -9,6 +9,7 @@ import { loadRomFromDevServer, loadRomFromFile } from './emulator/rom.js';
 import type { RomSource } from './emulator/rom.js';
 import { Log } from './log.js';
 import { Netplay } from './net/netplay.js';
+import { Router } from './router.js';
 import { Session } from './session.js';
 import { UI } from './ui.js';
 import type { Identity } from './ui.js';
@@ -65,19 +66,37 @@ ui.setBroker(config.brokerDescription);
 log.onEntry((entry) => ui.appendLog(entry));
 log.info('ready', { broker: config.brokerDescription, iceServers: config.broker.iceServers?.length ?? 'peerjs default' });
 
-// A `?join=CODE` link only prefills the field. It deliberately does not join on
-// its own: gotcha #6 wants a real user gesture before anything starts, because
-// from M2 onward that gesture is what unblocks audio.
-const prefill = new URLSearchParams(location.search).get('join');
-if (prefill) {
-  const code = normalizeRoomCode(prefill);
+/**
+ * Routes.
+ *
+ * A `#/join/CODE` link only *prefills* the field — it deliberately does not join
+ * on its own. Gotcha #6 wants a real user gesture before anything starts, since
+ * from M2 onward that gesture is what unblocks audio, and a link that opened a
+ * microphone prompt on page load would be worse than one extra click.
+ *
+ * The room route exists so a refresh mid-game lands you back on the landing page
+ * with the code already filled in, rather than on a blank one.
+ */
+function prefillFrom(raw: string): void {
+  const code = normalizeRoomCode(raw);
   if (code) {
     ui.prefillCode(code);
-    log.info('room code prefilled from the URL, press JOIN to connect', { code });
+    log.info('room code prefilled from the link, press JOIN to connect', { code });
   } else {
-    ui.showError('The ?join= code in this link is malformed.');
+    ui.showError('The room code in that link is malformed.');
   }
 }
+
+const router = new Router()
+  .on('/join/:code', ({ code }) => prefillFrom(code ?? ''))
+  .on('/room/:code', ({ code }) => prefillFrom(code ?? ''))
+  .otherwise(() => {});
+
+// Links from before the router used `?join=CODE`. Rewrite rather than drop them:
+// somebody's chat history is not a good place to break a URL.
+const legacy = new URLSearchParams(location.search).get('join');
+if (legacy && !location.hash) router.navigate(`/join/${encodeURIComponent(legacy)}`);
+router.start();
 
 /**
  * Open or close the microphone, then tell the room.
@@ -165,6 +184,9 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
   }
 
   ui.showRoom(role, next.roomCode);
+  // The URL now names the room, so a refresh or a shared tab lands somewhere
+  // meaningful instead of on a bare landing page.
+  router.navigate(`/room/${next.roomCode}`);
   ui.setBusy(false);
 
   // Every peer runs its own emulator; we synchronise inputs, not pixels.
@@ -376,6 +398,7 @@ async function teardown(reason: string): Promise<void> {
   session = null;
   ui.renderChannels([]);
   ui.showLanding();
+  router.navigate('/');
   log.info('left the room', { reason });
 }
 

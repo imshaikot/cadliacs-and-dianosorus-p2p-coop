@@ -13,6 +13,7 @@ import { isTyping } from './emulator/input.js';
 import type { MachineStats } from './emulator/machine.js';
 import type { LockstepStats } from './net/lockstep.js';
 import type { LogEntry } from './log.js';
+import { joinLink } from './router.js';
 import type { Player } from './session.js';
 
 /** How long the pointer must sit still before fullscreen hides its furniture. */
@@ -375,10 +376,7 @@ export class UI {
     this.#codeLabel.textContent = role === 'host' ? 'ROOM CODE — share this' : 'JOINED ROOM';
     this.#roomCode.textContent = formatRoomCode(roomCode);
     // A host shares a link; a guest has nothing useful to hand on but the code.
-    this.#shareText =
-      role === 'host'
-        ? `${location.origin}${location.pathname}?join=${roomCode}`
-        : formatRoomCode(roomCode);
+    this.#shareText = role === 'host' ? joinLink(roomCode) : formatRoomCode(roomCode);
     this.#btnCopy.title = this.#shareText;
   }
 
