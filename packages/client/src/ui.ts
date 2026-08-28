@@ -466,7 +466,7 @@ export class UI {
       const audible = audibleFor(p.peerId);
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'small speaker';
+      btn.className = 'btn btn-quiet speaker';
       btn.dataset['peer'] = p.peerId;
       btn.setAttribute('aria-pressed', String(audible));
       btn.textContent = audible ? 'hear' : 'silenced';

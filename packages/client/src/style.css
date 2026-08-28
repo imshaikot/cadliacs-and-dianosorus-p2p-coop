@@ -1,22 +1,21 @@
 /*
-  SERVICE MODE.
+  THE CABINET.
 
-  Not the game's attract screen — the board's own test-and-service screen, the
-  one an operator sees with the cabinet open. That is the right frame for this
-  app: it is mostly frames, checksums, latency and three machines agreeing, and
-  a service screen is what a CPS-1 board looks like when it is talking about
-  itself.
+  The page is a machine you stand in front of: a backlit marquee at the top, a
+  screen sunk into a bezel, a control panel below it, a coin door at the bottom.
+  Nothing here belongs to any one game — this player runs whatever you load into
+  it, so the furniture is the cabinet rather than the artwork bolted to it.
 
-  One rule generates the whole palette. CPS-1 video is 12-bit RGB — four bits a
-  channel, 4096 colours, and no alpha blending anywhere in the hardware. So
-  every colour below is one a real board could output: each hex byte is a
-  doubled nibble. Nothing in the interface fades; where the old design used a
-  gradient or a translucent fill, this one DITHERS — a 2px checkerboard, which
-  is what the board's own artists used to fake the shades they did not have.
+  The organising rule is light. There is exactly one source, the fluorescent tube
+  behind the marquee, and everything else is lit by it: mouldings catch a
+  highlight on their upper edge and a shadow on the lower, recessed wells invert
+  that, and the room itself falls away from the top of the page. Colour is spent
+  almost nowhere else, which is what leaves the three player colours and a fault
+  free to mean something.
 
-  The two exceptions are deliberate and both model the glass rather than the
-  interface: the CRT vignette and the scanlines. A tube really does fall off at
-  the corners; a palette does not.
+  The accents are the colours arcade buttons actually come in. That is also why
+  --p1 and a fault share a red: a fault is never carried by hue alone, it is an
+  inverted block (see .error).
 
   Everything decorative is `pointer-events: none`. tools/verify drives real
   trusted mouse events at element centres, so an overlay that swallowed clicks
@@ -25,557 +24,398 @@
 :root {
   color-scheme: dark;
 
-  --void: #000000;      /* the tube with nothing on it */
-  --board: #001122;     /* panel field */
-  --rail: #002233;      /* section rails, inset fields */
-  --rule: #114455;      /* hairline */
-  --rule-lit: #226677;  /* hairline, lit */
-  --faint: #336677;
-  --dim: #558899;
-  --ink: #bbddee;       /* body text — cold phosphor, nowhere near amber */
-  --hot: #ffffff;       /* emphasis, and the value a room code is read at */
+  --room: #0b0a0d;      /* the unlit room behind the cabinet */
+  --cab-dark: #17161a;  /* shadow between panels, and recessed wells */
+  --cab-body: #232128;  /* the plastic itself */
+  --cab-face: #2c2932;  /* a panel turned toward the light */
+  --cab-edge: #3d3945;  /* moulding, catching the marquee */
+  --bezel: #0c0b0e;     /* the surround the tube sits in */
+  --screen: #07070a;
 
-  --lit: #00ccdd;       /* cyan. structure: every label, rule and title bar */
-  --ok: #22dd88;        /* pass / ready / lockstep */
-  --ng: #ff3311;        /* fail. never carried by hue alone — see .error */
+  --ink: #efe9e2;       /* screen-printed white */
+  --dim: #a49c96;
+  --faint: #6f6862;
 
-  --p1: #ff5533;
-  --p2: #33aaff;
-  --p3: #aaee33;
+  /* The tube. The only warm light in the building. */
+  --glow: #fff3e2;
+  --glow-dim: #f0dcc2;
 
-  /*
-    The board's character cell. Every gap, pad and height on this page is a
-    multiple of it, so the whole layout sits on the grid the hardware has.
-  */
-  --cell: 8px;
-  --pad: calc(var(--cell) * 2);
+  --btn-red: #e2474a;
+  --btn-blue: #3f8fd4;
+  --btn-green: #47ab5c;
 
-  /* 50% fill, dithered. Set --dc on the element to choose what dithers in. */
-  --dither: repeating-conic-gradient(var(--dc, var(--rule)) 0% 25%, transparent 0% 50%) 0 0 / 4px 4px;
+  --p1: var(--btn-red);
+  --p2: var(--btn-blue);
+  --p3: var(--btn-green);
+  --ok: var(--btn-green);
+  --ng: var(--btn-red);
 
-  --font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --gap: 12px;
+  --pad: 20px;
+  --radius: 3px; /* moulded plastic, not a web card */
+
+  --font-cab: 'Avenir Next Condensed', 'Arial Narrow', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
 
 /*
-  One typeface for the entire page, at four sizes. A text-mode screen has
-  exactly one face in ROM, so hierarchy here comes from size, letter-spacing
-  and inversion rather than from a second family — and nothing has to be
-  fetched, which keeps a clone's network cost at zero the way the ROM policy
-  does.
+  Two faces, two jobs. Cabinet lettering is screen-printed condensed sans, so
+  every label, heading and button uses it. Anything that is a *readout* — the
+  room code, the HUD, the log, the channel table — is monospace, because those
+  are numbers that have to line up and change without the layout twitching.
 */
 body {
   margin: 0;
-  padding: var(--pad) var(--cell) calc(var(--cell) * 8);
-  background: var(--void);
+  padding: var(--pad) var(--gap) calc(var(--pad) * 3);
+  background: radial-gradient(120% 70% at 50% 0%, #14131a 0%, var(--room) 70%);
   color: var(--ink);
-  font: 14px/1.5 var(--font);
+  font: 15px/1.55 var(--font-cab);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* CRT glass: scanlines plus a vignette, over the whole page including the
-   emulator canvas. Both layers are inert to input. */
-body::before,
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 90;
-}
-body::before {
-  background: radial-gradient(118% 96% at 50% 45%, transparent 52%, rgba(0, 0, 0, 0.72) 100%);
-}
-body::after {
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.42) 0 1px,
-    transparent 1px 3px
-  );
-}
-
-.app {
-  max-width: 62rem;
+.cab {
+  max-width: 60rem;
   margin: 0 auto;
   display: grid;
-  gap: var(--pad);
-}
-
-/* ----------------------------------------------------------------- sysbar */
-
-.sysbar {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cell);
-  justify-content: space-between;
-  align-items: baseline;
-  padding: calc(var(--cell) / 2) var(--cell);
-  background: var(--rail);
-  border: 1px solid var(--rule);
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-.sysbar-id { color: var(--lit); font-weight: 700; }
-.sysbar .broker { margin: 0; color: var(--dim); }
-
-/*
-  The one orchestrated moment on the page: a single hard-edged field sweeping
-  across the status line once, the way a board draws its first frame. It runs
-  on load and never again.
-*/
-.sysbar::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent 0 42%, var(--lit) 42% 58%, transparent 58%);
-  animation: post-sweep 700ms steps(20, end) 1 both;
-}
-@keyframes post-sweep {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
+  gap: var(--gap);
 }
 
 /* ---------------------------------------------------------------- marquee */
 
+/*
+  A backlit graphic panel, and the page's only light source. Everything below is
+  painted as if it were coming from here.
+*/
 .marquee {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--rule-lit);
-  background: var(--void);
+  padding: calc(var(--pad) * 1.4) var(--pad) var(--pad);
+  text-align: center;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #fffaf2 0%, var(--glow) 42%, var(--glow-dim) 100%);
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.25),
+    0 0 60px rgba(255, 235, 200, 0.14),
+    0 6px 18px rgba(0, 0, 0, 0.6);
 }
-.marquee-art {
+/* The tube itself: a bright band behind the artwork, brightest at the top. */
+.marquee-tube {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0 0 auto;
+  height: 46%;
   pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
 }
-.marquee-inner {
+
+.wordmark {
   position: relative;
-  padding: calc(var(--cell) * 4) var(--pad) calc(var(--cell) * 3);
-  text-align: center;
-}
-
-.logo {
   margin: 0;
-  display: grid;
-  justify-items: center;
-  gap: var(--cell);
-  font-weight: 700;
-  line-height: 0.95;
-  text-transform: uppercase;
-}
-/*
-  Arcade type is a flat fill inside a hard black outline, offset once more in a
-  second colour — which is both how the board's own title art was drawn and
-  what a misconverged tube does to white text. Eight shadows make the outline,
-  the ninth is the offset. No gradient fill: a 12-bit palette has no room for
-  one, and the old chrome-and-oxide treatment was the most modern thing on the
-  page.
-*/
-.logo-top,
-.logo-bot {
-  font-size: clamp(1.7rem, 6.6vw, 3.5rem);
-  letter-spacing: 0.1em;
-  text-indent: 0.1em;
-  color: var(--hot);
-  text-shadow:
-    2px 0 0 var(--void), -2px 0 0 var(--void), 0 2px 0 var(--void), 0 -2px 0 var(--void),
-    2px 2px 0 var(--void), -2px 2px 0 var(--void), 2px -2px 0 var(--void), -2px -2px 0 var(--void),
-    5px 5px 0 var(--lit);
-}
-.logo-bot { color: var(--p1); }
-
-.logo-and {
   display: flex;
-  align-items: center;
-  gap: var(--cell);
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.4em;
-  text-indent: 0.4em;
-  color: var(--lit);
-  width: min(100%, 20rem);
-}
-.logo-and::before,
-.logo-and::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--lit);
-}
-
-/* A solid plate under the strapline, since it has no outline to read by. */
-.masthead .sub {
-  display: inline-block;
-  margin: calc(var(--cell) * 2) 0 0;
-  padding: calc(var(--cell) / 2) var(--cell);
-  background: var(--void);
-  color: var(--lit);
-  font-size: 10px;
-  letter-spacing: 0.26em;
-  text-indent: 0.26em;
-  text-transform: uppercase;
-}
-
-/* Once you are in a room the marquee is just a title bar — the game gets the
-   space. No JS toggles this; the room view's `hidden` attribute drives it. */
-body:has(#view-room:not([hidden])) .marquee-art { display: none; }
-body:has(#view-room:not([hidden])) .marquee-inner { padding: var(--cell) var(--pad); }
-body:has(#view-room:not([hidden])) .logo { gap: 0; }
-body:has(#view-room:not([hidden])) .logo-top,
-body:has(#view-room:not([hidden])) .logo-bot {
-  font-size: clamp(0.95rem, 3vw, 1.4rem);
-  text-shadow: 1px 1px 0 var(--void), 2px 2px 0 var(--lit);
-}
-body:has(#view-room:not([hidden])) .logo-and,
-body:has(#view-room:not([hidden])) .masthead .sub { display: none; }
-
-/* ----------------------------------------------------------------- panels */
-
-.panel {
-  background: var(--board);
-  border: 1px solid var(--rule);
-  padding: var(--pad);
-}
-
-/*
-  Two ranks of heading, and the difference between them is the whole reason the
-  page can afford one loud thing.
-
-  A title that names an entire surface — the identity dialog is the only one —
-  is a solid block of cyan with the words knocked out of it, the way a text-mode
-  menu marks the line you are on. A section *inside* a surface gets the quiet
-  form: a dark strip with a cyan block on its left edge. Four solid bars down
-  one page turned the loudest device into wallpaper and left nothing for the
-  colour bars to be louder than.
-*/
-.identity h2 {
-  margin: 0;
-  padding: var(--cell) var(--pad);
-  background: var(--lit);
-  color: var(--void);
-  font: inherit;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.lobby-head,
-.diagnostics summary,
-.join label,
-.controls-head h2 {
-  margin: 0;
-  padding: calc(var(--cell) / 2) var(--cell);
-  background: var(--rail);
-  border-left: calc(var(--cell) / 2) solid var(--lit);
-  color: var(--lit);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-/* Already sitting on a rail; a second one would just be a box in a box. */
-.controls-head h2 { background: none; }
-
-/* Bleed the block-level ones out to the panel's own edges. */
-.lobby-head,
-.diagnostics summary {
-  margin-inline: calc(var(--pad) * -1);
-}
-
-/*
-  A rail is the other kind of section header: a dark strip that also carries
-  live state, so it cannot be a solid block of cyan without the status colours
-  inside it going to mud. The cyan tab moves inside instead.
-*/
-.room-head,
-.controls-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cell);
-  align-items: center;
-  margin: calc(var(--pad) * -1) calc(var(--pad) * -1) var(--pad);
-  padding: var(--cell) var(--pad);
-  background: var(--rail);
-  border-bottom: 1px solid var(--rule);
-}
-
-/* ---------------------------------------------------------------- landing */
-
-.coin {
-  margin: 0 0 var(--pad);
-  text-align: center;
-  font-size: 11px;
-  letter-spacing: 0.32em;
-  text-indent: 0.32em;
-  text-transform: uppercase;
-  color: var(--p1);
-  animation: coin-blink 1.4s steps(1, end) infinite;
-}
-@keyframes coin-blink {
-  0%, 62% { opacity: 1; }
-  63%, 100% { opacity: 0; }
-}
-
-/*
-  THE SIGNATURE. The three slots, drawn as the colour-bar block a board shows
-  while it is testing its own video. Each bar is a four-step ramp in that
-  player's hue, and the steps are visible on purpose: 12-bit colour has that
-  few of them. It looks like a test card and it is also the answer to "how many
-  of us can play, and who".
-*/
-.crew {
-  list-style: none;
-  margin: 0 0 var(--pad);
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-}
-@media (max-width: 34rem) { .crew { grid-template-columns: 1fr; } }
-
-.crew li {
-  display: grid;
-  grid-template-columns: auto 1fr;
   align-items: baseline;
-  gap: var(--cell);
+  justify-content: center;
+  gap: 0.3em;
+  /* Knocked out of the lit panel, the way a marquee graphic is opaque ink on a
+     translucent sheet with the tube behind it. */
+  color: var(--cab-dark);
+  font-weight: 700;
+  font-size: clamp(2.1rem, 8vw, 4rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
 }
-.crew li::before {
-  content: '';
-  grid-column: 1 / -1;
-  height: calc(var(--cell) * 6);
-  background-image: var(--ramp);
+.wordmark-sub {
+  font-size: 0.46em;
+  letter-spacing: 0.16em;
+  padding: 0.16em 0.4em;
+  border-radius: 2px;
+  background: var(--btn-red);
+  color: var(--glow);
 }
-.crew b,
-.crew span {
-  font-size: 11px;
+.marquee .tagline {
+  position: relative;
+  margin: 0.5rem 0 0;
+  color: #5b5148;
+  font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.crew b { color: var(--hue); font-weight: 700; }
-.crew span { color: var(--dim); }
+.marquee .broker {
+  position: relative;
+  margin: 0.2rem 0 0;
+  color: #7d7166;
+  font-family: var(--font-data);
+  font-size: 10px;
+}
+
+/* In a room the marquee is just a header — the game gets the height. No JS
+   toggles this; the room view's `hidden` attribute drives it. */
+body:has(#view-room:not([hidden])) .marquee { padding: 0.6rem var(--pad); }
+body:has(#view-room:not([hidden])) .wordmark { font-size: clamp(1.1rem, 3.4vw, 1.5rem); }
+body:has(#view-room:not([hidden])) .marquee .tagline { display: none; }
+
+/* ----------------------------------------------------------------- panels */
 
 /*
-  One place defines what a slot looks like, and everything with a data-slot on
-  it — the test card, the lobby cards, the talking indicator, the controls
-  header — reads its hue and its ramp from here.
+  A moulded plastic panel. The 1px light top edge over a dark bottom edge is the
+  whole trick — it reads as a bevel catching the marquee from above.
 */
-[data-slot='1'] {
-  --hue: var(--p1);
-  --ramp: linear-gradient(to right, #ff5533 0 25%, #cc4422 0 50%, #883322 0 75%, #442211 0);
-}
-[data-slot='2'] {
-  --hue: var(--p2);
-  --ramp: linear-gradient(to right, #33aaff 0 25%, #2288cc 0 50%, #1166aa 0 75%, #114466 0);
-}
-[data-slot='3'] {
-  --hue: var(--p3);
-  --ramp: linear-gradient(to right, #aaee33 0 25%, #88bb22 0 50%, #557711 0 75%, #223300 0);
+.panel {
+  position: relative;
+  padding: var(--pad);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--cab-face), var(--cab-body) 60%);
+  box-shadow:
+    inset 0 1px 0 var(--cab-edge),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
-.landing-grid {
+.panel h2 {
+  margin: 0 0 0.4rem;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* --------------------------------------------------------------- coin door */
+
+.coin-door { padding-top: calc(var(--pad) * 1.2); }
+
+.attract {
+  margin: 0 0 var(--pad);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  text-transform: uppercase;
+  color: var(--btn-red);
+  animation: attract-blink 1.6s steps(1, end) infinite;
+}
+@keyframes attract-blink {
+  0%, 64% { opacity: 1; }
+  65%, 100% { opacity: 0.15; }
+}
+
+.door-grid {
   display: grid;
-  gap: var(--pad);
+  gap: var(--gap);
   grid-template-columns: 1fr 1fr;
-  align-items: stretch;
 }
-@media (max-width: 40rem) { .landing-grid { grid-template-columns: 1fr; } }
+@media (max-width: 40rem) { .door-grid { grid-template-columns: 1fr; } }
 
-.join {
+/* Recessed, like the coin-return well: darker than the panel, bevel inverted. */
+.door-card {
   display: flex;
   flex-direction: column;
-  gap: var(--cell);
+  gap: 0.55rem;
   padding: var(--pad);
-  border: 1px solid var(--rule);
-  background: var(--void);
+  border-radius: var(--radius);
+  background: var(--cab-dark);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.6), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
-.join label { margin: calc(var(--pad) * -1) calc(var(--pad) * -1) var(--cell); }
-.join .hint { margin: 0; color: var(--dim); font-size: 12px; }
-.join .big { margin-top: auto; }
+.door-card .hint { margin: 0; color: var(--faint); font-size: 13px; }
+.door-card .btn { margin-top: auto; }
 
-/* The serial plate on the back of the cabinet. Hairline seams, no boxes. */
+/* The plate riveted to the cabinet: stamped, not printed. */
 .plate {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1px;
   margin: var(--pad) 0 0;
-  background: var(--rule);
-  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.45);
 }
 @media (max-width: 40rem) { .plate { grid-template-columns: repeat(2, 1fr); } }
-.plate > div { background: var(--board); padding: var(--cell); }
+.plate > div { background: var(--cab-dark); padding: 0.6rem 0.8rem; }
 .plate dt {
-  color: var(--lit);
+  color: var(--faint);
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 .plate dd {
-  margin: calc(var(--cell) / 2) 0 0;
+  margin: 0.15rem 0 0;
   color: var(--ink);
+  font-family: var(--font-data);
   font-size: 13px;
-  letter-spacing: 0.06em;
 }
 
-.footnote {
-  margin: var(--cell) 0 0;
-  font-size: 11px;
-  color: var(--faint);
-  letter-spacing: 0.06em;
-}
+.cab-foot { margin: 0; padding: 0 var(--pad); text-align: center; }
+.cab-foot p { margin: 0; color: var(--faint); font-size: 12px; }
 
 /* --------------------------------------------------------------- controls */
 
 /*
-  Buttons behave like lines in a service menu: an outline at rest, and a full
-  inversion the instant they are pressed. No transform, no transition — a text
-  screen has one frame to change in, and the snap is what makes it feel like
-  hardware rather than a web page.
+  Buttons are moulded caps: a coloured dome with a light top edge that travels
+  *down* when pressed rather than changing colour. That is what a real one does,
+  and it is the cheapest way to make a flat page feel like hardware.
 */
-button.big {
+.btn {
   font: inherit;
-  font-size: clamp(0.9rem, 2.1vw, 1.05rem);
   font-weight: 700;
-  letter-spacing: 0.2em;
-  text-indent: 0.2em;
-  text-transform: uppercase;
-  padding: calc(var(--cell) * 1.5) var(--cell);
-  color: var(--lit);
-  background: var(--void);
-  border: 1px solid var(--lit);
-  cursor: pointer;
-}
-button.big:hover { --dc: var(--rule-lit); background: var(--dither), var(--void); color: var(--hot); }
-button.big:active { background: var(--lit); color: var(--void); }
-button.big:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
-button.big:disabled { color: var(--faint); border-color: var(--rule); background: var(--void); cursor: progress; }
-
-/* Committing to something is already inverted, and inverts back on press. */
-button.big.primary {
-  color: var(--void);
-  background: var(--p1);
-  border-color: var(--p1);
-}
-button.big.primary:hover { --dc: var(--void); background: var(--dither), var(--p1); color: var(--void); }
-button.big.primary:active { background: var(--void); color: var(--p1); }
-button.big.primary:disabled { background: var(--void); color: var(--faint); border-color: var(--rule); }
-
-button.small {
-  font: inherit;
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: calc(var(--cell) / 2) var(--cell);
-  background: var(--void);
-  color: var(--dim);
-  border: 1px solid var(--rule);
+  padding: 0.7rem 1.1rem;
+  border: 0;
+  border-radius: var(--radius);
   cursor: pointer;
+  color: var(--ink);
+  background: linear-gradient(180deg, #423d4a, #302c37);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 0 #14121a;
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
 }
-button.small:hover { color: var(--void); background: var(--lit); border-color: var(--lit); }
-button.small:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
+.btn:hover { background: linear-gradient(180deg, #4b4554, #37323f); }
+.btn:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 0 #14121a;
+}
+.btn:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.btn:disabled {
+  color: var(--faint);
+  background: #2a2732;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* The one red cap on the panel: the action that starts something. */
+.btn-primary {
+  color: #2a0d0e;
+  background: linear-gradient(180deg, #f0666a, var(--btn-red));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 2px 0 #7c1f21;
+}
+.btn-primary:hover { background: linear-gradient(180deg, #f47a7d, #e55558); }
+.btn-primary:active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 0 0 #7c1f21; }
+.btn-primary:disabled { color: var(--faint); background: #2a2732; box-shadow: none; }
+
+/* Service buttons: the small unlit ones behind the coin door. */
+.btn-quiet {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  padding: 0.35rem 0.7rem;
+  color: var(--dim);
+  background: #201e26;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 0 #131118;
+}
+.btn-quiet:hover { color: var(--ink); background: #29262f; }
+.btn-quiet:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07); }
 
 input {
   font: inherit;
-  padding: calc(var(--cell) * 1.5) var(--cell);
-  background: var(--rail);
-  color: var(--hot);
-  border: 1px solid var(--rule);
-  border-radius: 0;
-  letter-spacing: 0.2em;
-  caret-color: var(--lit);
+  font-family: var(--font-data);
+  padding: 0.7rem 0.8rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: #100f14;
+  color: var(--ink);
+  letter-spacing: 0.12em;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
-input::placeholder { color: var(--faint); }
+input::placeholder { color: var(--faint); letter-spacing: 0.16em; }
 input:focus {
   outline: none;
-  background: var(--void);
-  border-color: var(--lit);
-  box-shadow: inset 0 0 0 1px var(--lit);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), inset 0 0 0 1px var(--glow);
 }
 
 /*
-  A fault is inverted, not tinted. Red is a player colour on this page and a
-  sunset colour in the marquee, so a red word on black would read as neither
-  urgent nor wrong — a solid block with the text knocked out of it is the only
-  treatment nothing else here uses.
+  A fault is an inverted block, never a red word. Red is a player colour here and
+  the primary button's colour too, so hue alone would read as neither urgent nor
+  wrong.
 */
-.error { min-height: 1.3em; margin: var(--cell) 0 0; }
+.error { min-height: 1.2em; margin: var(--gap) 0 0; }
 .error:not(:empty) {
-  padding: var(--cell);
-  background: var(--ng);
-  color: var(--void);
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--btn-red);
+  color: #2a0d0e;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 13px;
 }
-.error:not(:empty)::before { content: '!! '; }
+.error:not(:empty)::before { content: '⚠ '; }
 
 /* ------------------------------------------------------------------- room */
 
-.room-head { justify-content: space-between; }
-.code-block { display: flex; align-items: center; gap: var(--cell); flex-wrap: wrap; }
+.room-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  align-items: center;
+  justify-content: space-between;
+}
+.code-block { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .code-label {
-  color: var(--lit);
+  color: var(--faint);
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 /* The one string in this app that gets read aloud down a phone. */
 .code {
-  font-family: inherit;
-  font-size: clamp(1.3rem, 4.2vw, 2rem);
+  font-family: var(--font-data);
+  font-size: clamp(1.2rem, 4vw, 1.8rem);
   font-weight: 700;
-  letter-spacing: 0.22em;
-  text-indent: 0.22em;
-  color: var(--hot);
-  background: var(--void);
-  border: 1px solid var(--rule-lit);
-  padding: calc(var(--cell) / 2) var(--cell);
+  letter-spacing: 0.16em;
+  color: var(--glow);
+  background: #100f14;
+  border-radius: var(--radius);
+  padding: 0.35rem 0.7rem;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
 }
-.status-block { display: flex; align-items: center; gap: var(--cell); margin-left: auto; }
+.status-block { display: flex; align-items: center; gap: 0.6rem; margin-left: auto; }
 
+/* An indicator lamp, not a chip. Off is a dark lens; on is lit from inside. */
 .pill {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  padding: calc(var(--cell) / 2) var(--cell);
-  border: 1px solid var(--rule);
-  color: var(--dim);
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  color: var(--faint);
+  background: #191720;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
 }
-.pill[data-status='ready'] { background: var(--ok); border-color: var(--ok); color: var(--void); }
-.pill[data-status='error'] { background: var(--ng); border-color: var(--ng); color: var(--void); }
+.pill[data-status='ready'] { color: #0d2413; background: var(--ok); box-shadow: 0 0 12px rgba(71, 171, 92, 0.5); }
+.pill[data-status='error'] { color: #2a0d0e; background: var(--ng); box-shadow: 0 0 12px rgba(226, 71, 74, 0.5); }
 .pill[data-status='connecting'],
-.pill[data-status='reconnecting'] { color: var(--lit); border-color: var(--lit); }
+.pill[data-status='reconnecting'] { color: var(--glow); background: #3a3320; }
 
 /* --------------------------------------------------------------- the lobby */
 
 .lobby { margin-top: var(--pad); }
-.lobby-head { margin-bottom: var(--pad); }
-.lobby-count { color: var(--dim); font-weight: 400; letter-spacing: 0.12em; }
+.lobby-head { display: flex; align-items: baseline; gap: 0.5rem; }
+.lobby-count { color: var(--faint); font-weight: 400; letter-spacing: 0.1em; }
 
-.roster { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--cell); }
-@media (min-width: 46rem) {
-  .roster { grid-template-columns: repeat(3, 1fr); }
-}
+.roster { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gap); }
+@media (min-width: 46rem) { .roster { grid-template-columns: repeat(3, 1fr); } }
 
-/* The slot's colour bar from the test card, continued down the card's edge. */
+/* A player's card wears their button colour: the stripe is the cap on the
+   panel, and one rule feeds the portrait, the slot label and the talker chip. */
+[data-slot='1'] { --hue: var(--p1); }
+[data-slot='2'] { --hue: var(--p2); }
+[data-slot='3'] { --hue: var(--p3); }
+
 .roster li {
   position: relative;
   display: flex;
-  gap: var(--pad);
+  gap: var(--gap);
   align-items: center;
-  padding: var(--cell);
-  background: var(--void);
-  border: 1px solid var(--rule);
-  border-left: var(--cell) solid var(--hue, var(--rule-lit));
+  padding: 0.7rem;
+  border-radius: var(--radius);
+  background: var(--cab-dark);
+  border-left: 5px solid var(--hue, var(--faint));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-.roster li[data-self='true'] { border-color: var(--rule-lit); }
+.roster li[data-self='true'] { background: #201e26; }
 /* A live microphone is the one state in here worth catching your eye. */
-.roster li[data-talking='true'] { border-color: var(--p1); border-left-color: var(--hue, var(--p1)); }
+.roster li[data-talking='true'] { box-shadow: inset 0 0 0 1px var(--btn-red), 0 0 14px rgba(226, 71, 74, 0.28); }
 
 /*
  * The portrait, and the control tucked into its corner.
@@ -592,69 +432,67 @@ input:focus {
   color: var(--hue, var(--dim));
 }
 .portrait > .portrait-art {
-  width: 88px;
-  height: 88px;
-  padding: var(--cell);
-  border: 1px solid var(--rule-lit);
-  background: var(--void);
+  width: 76px;
+  height: 76px;
+  padding: 0.5rem;
+  border-radius: 999px;
+  background: #100f14;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.07);
 }
-@media (max-width: 46rem) {
-  .portrait > .portrait-art { width: 72px; height: 72px; }
-}
+@media (max-width: 46rem) { .portrait > .portrait-art { width: 64px; height: 64px; } }
 
-/*
- * A square tab hanging off the portrait's bottom-right corner. Everything on a
- * text screen is a rectangle, so this is one too — but it still overlaps the
- * frame, because a status marker that sits inside the picture reads as part of
- * the picture.
- */
+/* A button cap tucked into the portrait's corner — the same object as the ones
+   on the control panel, so it reads as pressable without a label. */
 .mic-orb,
 .mic-badge {
   position: absolute;
-  right: calc(var(--cell) * -1);
-  bottom: calc(var(--cell) * -1);
+  right: -4px;
+  bottom: -4px;
   display: grid;
   place-items: center;
-  width: calc(var(--cell) * 4);
-  height: calc(var(--cell) * 4);
+  width: 30px;
+  height: 30px;
   padding: 0;
-  border: 1px solid var(--rule-lit);
-  background: var(--void);
+  border: 0;
+  border-radius: 999px;
   color: var(--dim);
+  background: linear-gradient(180deg, #3b3644, #29252f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 4px rgba(0, 0, 0, 0.7);
 }
-.mic-badge { width: calc(var(--cell) * 3.5); height: calc(var(--cell) * 3.5); }
-.mic-icon { width: 17px; height: 17px; display: block; }
-.mic-badge .mic-icon { width: 15px; height: 15px; }
+.mic-badge { width: 26px; height: 26px; }
+.mic-icon { width: 16px; height: 16px; display: block; }
+.mic-badge .mic-icon { width: 14px; height: 14px; }
 .mic-orb { cursor: pointer; }
-.mic-orb:hover:not(:disabled) { color: var(--void); background: var(--lit); border-color: var(--lit); }
-.mic-orb:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
-.mic-orb:disabled { color: var(--faint); border-color: var(--rule); cursor: not-allowed; }
+.mic-orb:hover:not(:disabled) { color: var(--ink); }
+.mic-orb:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.mic-orb:disabled { opacity: 0.45; cursor: not-allowed; }
 .mic-orb[data-busy='true'] { cursor: progress; }
-/* Pressed means the microphone is open. */
+/* Pressed means the microphone is open — the cap is lit. */
 .mic-orb[aria-pressed='true'],
 .mic-badge[data-muted='false'] {
-  color: var(--void);
-  background: var(--p1);
-  border-color: var(--p1);
+  color: #2a0d0e;
+  background: linear-gradient(180deg, #f0666a, var(--btn-red));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 10px rgba(226, 71, 74, 0.55);
 }
 
-.card-body { display: grid; gap: calc(var(--cell) / 2); min-width: 0; }
+.card-body { display: grid; gap: 0.1rem; min-width: 0; }
 .roster .slot {
   font-weight: 700;
-  letter-spacing: 0.16em;
   font-size: 11px;
+  letter-spacing: 0.16em;
   color: var(--hue, var(--ink));
 }
-.roster .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.roster .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
 .roster .mic-state {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);
 }
-.roster .mic-state[data-muted='false'] { color: var(--p1); }
+.roster .mic-state[data-muted='false'] { color: var(--btn-red); }
 .roster .peer-id {
   color: var(--faint);
+  font-family: var(--font-data);
   font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -662,149 +500,159 @@ input:focus {
 }
 .roster .you {
   position: absolute;
-  top: 0;
-  right: 0;
-  padding: 0 calc(var(--cell) / 2);
-  background: var(--lit);
-  color: var(--void);
-  font-size: 10px;
+  top: 0.4rem;
+  right: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 2px;
+  background: var(--glow);
+  color: var(--cab-dark);
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-.roster .speaker { position: absolute; top: 0; right: 0; font-size: 10px; }
-.roster .speaker[aria-pressed='false'] { color: var(--faint); border-style: dashed; }
+.roster .speaker { position: absolute; top: 0.35rem; right: 0.4rem; font-size: 10px; }
+.roster .speaker[aria-pressed='false'] { opacity: 0.55; }
 
 /* ------------------------------------------------------------------ stage */
 
 .stage-wrap { position: relative; margin-top: var(--pad); }
 
+/* The tube sits in a deep plastic surround, which is what the bezel is. */
 .stage {
   position: relative;
-  aspect-ratio: 384 / 224;
-  background-color: var(--void);
-  border: 1px solid var(--rule-lit);
-  padding: var(--cell);
+  min-height: 14rem;
   display: grid;
   place-items: center;
+  padding: 14px;
+  border-radius: 6px;
+  background: var(--bezel);
   overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 2px 14px rgba(0, 0, 0, 0.9),
+    0 4px 16px rgba(0, 0, 0, 0.6);
   /* Double-clicking the screen toggles fullscreen; without this it also drags
      a selection across whatever placeholder text is under the pointer. */
   user-select: none;
 }
+
 /*
-  No picture yet, so the tube shows the alignment grid an operator uses to
-  converge it. It is the one place a grid means something rather than decorates
-  something, and it disappears the moment the canvas has a frame to draw.
-  Browsers without :has() simply get a black screen, which is the harmless way
-  to be wrong.
-*/
-.stage:has(#screen[hidden]) {
-  background-image:
-    repeating-linear-gradient(to right, var(--rule) 0 1px, transparent 1px 32px),
-    repeating-linear-gradient(to bottom, var(--rule) 0 1px, transparent 1px 32px);
-  background-position: center;
+ * The canvas carries its own intrinsic ratio from the width/height attributes
+ * renderer.ts rewrites whenever the core's geometry changes, so `height: auto`
+ * tracks whatever game is loaded. The rule this replaced pinned the container
+ * to 384/224 and letterboxed anything else wrongly.
+ */
+#screen {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+  background: var(--screen);
+  /* Pixel art blown up; never let the browser smooth it. */
+  image-rendering: pixelated;
 }
+/*
+ * An author `display` outranks the UA's `[hidden] { display: none }`, so without
+ * this a canvas that JS had hidden still laid out at the full size of the stage
+ * and painted black over the picker underneath it. In production — the only
+ * place without a dev-server ROM — that left nothing to click but a black
+ * rectangle. verify-prod hit-tests the picker now rather than trusting the
+ * attribute, which is what would have caught it.
+ */
+#screen[hidden] { display: none; }
+
+/*
+ * Scanlines, on the tube only — the page is a cabinet, not a CRT, so this is the
+ * one surface where they belong. A static pseudo-element the compositor paints
+ * once, never a per-frame effect over a canvas repainting 59.63 times a second.
+ * Inert to input, and below the fullscreen latch at z-index 2.
+ */
+.stage::after {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+}
+#stage-wrap:fullscreen .stage::after { inset: 0; border-radius: 0; }
 
 /* Fullscreen latch, held in the bezel's corner. Out of the way until the
    pointer is over the screen, like a video player's controls. */
 .stage-btn {
   position: absolute;
-  top: var(--cell);
-  right: var(--cell);
+  top: 12px;
+  right: 12px;
   z-index: 2;
   /* Deliberately NOT backdrop-filter: this button sits over a canvas that
      repaints 59.63 times a second, and a backdrop filter makes the compositor
      read that canvas back and blur it every single frame. It cost ~1ms of the
      16.78ms budget and dropped catch-up frames. A flat scrim is free. */
-  background: var(--void);
-  border-color: var(--rule-lit);
+  background: rgba(12, 11, 14, 0.9);
   /* Dimmed rather than hidden: a control nobody can find is not a control. */
-  opacity: 0.55;
-  transition: opacity 140ms steps(4, end);
+  opacity: 0.5;
+  transition: opacity 140ms ease-out;
 }
 .stage:hover .stage-btn,
 .stage-btn:focus-visible { opacity: 1; }
 
 .stage-placeholder {
   margin: 0;
-  padding: var(--cell) var(--pad);
+  padding: 1rem;
   text-align: center;
-  background: var(--void);
-  color: var(--lit);
-  font-size: 12px;
-  letter-spacing: 0.28em;
-  text-indent: 0.28em;
+  color: var(--dim);
+  font-size: 13px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
 }
-#screen {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  /* CPS-1 is 384x224 of deliberate pixel art; never let the browser smooth it. */
-  image-rendering: pixelated;
-}
-/*
- * The same trap `.speaking` documents further down, and this one shipped: an
- * author `display` outranks the UA's `[hidden] { display: none }`, so a canvas
- * that JS had hidden still laid out at the full size of the stage and painted
- * black over the ROM picker underneath it. In production — the only place
- * without a dev-server ROM — that left nothing to click but a black rectangle.
- * verify-prod missed it because it set the file input through CDP, which needs
- * no visible element; it now hit-tests the picker instead.
- */
-#screen[hidden] { display: none; }
+
 .rom-picker {
+  max-width: min(34rem, 100%);
+  padding: var(--pad);
+  border-radius: var(--radius);
   text-align: center;
   color: var(--dim);
-  padding: var(--pad);
-  background: var(--board);
-  border: 1px solid var(--rule);
+  background: var(--cab-body);
+  box-shadow: inset 0 1px 0 var(--cab-edge), 0 4px 14px rgba(0, 0, 0, 0.6);
 }
-.rom-picker { max-width: min(52ch, 100%); }
-.rom-picker p { margin: 0 0 var(--cell); }
-.rom-picker code { color: var(--hot); }
-/* The why rides on the upload control itself rather than floating above it, so
-   the answer is where the question gets asked. The romset name stays lit: it is
-   the searchable term, and the only part of this worth carrying away. */
+.rom-picker > p { margin: 0 0 0.8rem; color: var(--ink); font-size: 15px; }
 .rom-bar {
   display: grid;
-  gap: calc(var(--cell) / 2);
-  padding: var(--cell);
+  gap: 0.5rem;
+  padding: 0.7rem;
+  border-radius: var(--radius);
   text-align: left;
-  /* Darker than the box around it, not lighter: --faint on --rail measured
-     2.59:1, and this caption is 11px. --dim on --void is 5.37:1. */
-  background: var(--void);
-  border: 1px solid var(--rule);
+  background: #100f14;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
 }
+.rom-bar input { background: transparent; box-shadow: none; padding: 0; font-size: 12px; }
 .rom-why { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.6; }
-.rom-picker .rom-why code { color: var(--lit); }
-.rom-picker input { letter-spacing: normal; font-size: 12px; }
 
 .hud {
-  margin: var(--cell) 0 0;
+  margin: 0.5rem 0 0;
+  font-family: var(--font-data);
   font-size: 11px;
-  color: var(--dim);
+  color: var(--faint);
   display: flex;
-  gap: var(--pad);
+  gap: 1.2rem;
   flex-wrap: wrap;
-  letter-spacing: 0.06em;
 }
-.hud b { color: var(--ink); font-weight: 400; }
+.hud b { color: var(--dim); font-weight: 400; }
 .hud[data-warn='true'] b { color: var(--ng); }
-.netplay .phase { text-transform: uppercase; letter-spacing: 0.16em; font-weight: 700; }
+.netplay .phase { text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
 .netplay[data-phase='lockstep'] .phase { color: var(--ok); }
 .netplay[data-phase='stalled'] .phase { color: var(--ng); }
-.netplay[data-phase='syncing'] .phase { color: var(--lit); }
+.netplay[data-phase='syncing'] .phase { color: var(--glow); }
 .netplay[data-phase='solo'] .phase { color: var(--dim); }
 /* Peers disagreeing about a frame is the one number worth an inverted block. */
 .netplay .desync {
   background: var(--ng);
-  color: var(--void);
+  color: #2a0d0e;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  padding: 0 calc(var(--cell) / 2);
+  padding: 0 0.4rem;
+  border-radius: 2px;
 }
 
 /* -------------------------------------------------------------- fullscreen */
@@ -813,117 +661,108 @@ input:focus {
  * The wrapper is what goes fullscreen, so the HUD lines come along instead of
  * being left behind on the page. They float over the bottom of the picture
  * rather than stealing height from it.
- *
- * The UA stylesheet pins the wrapper to the viewport, which overrides the
- * stage's aspect-ratio; `object-fit: contain` on the canvas is what keeps
- * 384x224 honest and letterboxes the rest.
  */
 #stage-wrap:fullscreen {
   display: flex;
   flex-direction: column;
-  background: var(--void);
+  background: #000;
 }
 /* Painted behind the element for the moment before the transition settles. */
-#stage-wrap::backdrop { background: var(--void); }
+#stage-wrap::backdrop { background: #000; }
 #stage-wrap:fullscreen .stage {
   flex: 1;
   min-height: 0;
   margin: 0;
-  /* No bezel on a fullscreen screen -- the cabinet's inset would just be
-     picture thrown away. */
+  /* No bezel on a fullscreen screen — the surround would just be picture
+     thrown away. */
   padding: 0;
-  aspect-ratio: auto;
-  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
-
-/* A fullscreen element paints in the top layer, above body::before/::after --
-   so the cabinet's CRT glass has to be re-laid inside it or the picture loses
-   the scanlines it has everywhere else on the page. */
-#stage-wrap:fullscreen::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.42) 0 1px, transparent 1px 3px),
-    radial-gradient(118% 96% at 50% 45%, transparent 52%, rgba(0, 0, 0, 0.72) 100%);
+/* Here the canvas must fit the viewport rather than carry its own height, and
+   object-fit is what keeps the game's aspect honest while letterboxing. */
+#stage-wrap:fullscreen #screen {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0;
 }
 
 #stage-wrap:fullscreen .hud-rows {
   position: absolute;
   inset: auto 0 0;
   z-index: 2;
-  padding: var(--cell) var(--pad);
-  /* The scrim has to hold grey-on-bright: CPS-1 backgrounds go to full-value
-     green and yellow, and a gentle fade leaves the HUD unreadable over them.
-     Flat and opaque, which is also the only thing the palette rule allows. */
-  background: var(--void);
-  border-top: 1px solid var(--rule);
-  transition: opacity 200ms steps(5, end);
+  padding: 0.5rem 1rem 0.6rem;
+  /* The scrim has to hold grey-on-bright: arcade backgrounds go to full-value
+     green and yellow, and a gentle fade leaves the HUD unreadable over them. */
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 55%, transparent 100%);
+  transition: opacity 200ms ease-out;
 }
 #stage-wrap:fullscreen .hud { margin: 0; justify-content: center; }
 
 /* Idle means the pointer has not moved for a couple of seconds. Fade the
-   furniture out -- but never a live desync count, which is the one number
-   worth interrupting a game for. Browsers without :has() drop the whole rule
-   and simply keep the HUD up, which is the harmless way to be wrong. */
+   furniture out — but never a live desync count, which is the one number worth
+   interrupting a game for. Browsers without :has() drop the whole rule and
+   simply keep the HUD up, which is the harmless way to be wrong. */
 #stage-wrap:fullscreen[data-idle='true'] { cursor: none; }
 #stage-wrap:fullscreen[data-idle='true'] .stage-btn { opacity: 0; pointer-events: none; }
 #stage-wrap:fullscreen[data-idle='true'] .hud-rows:not(:has(.desync)) { opacity: 0; }
 
 /* ------------------------------------------------------- chat and the log */
 
-.chat { display: flex; align-items: stretch; gap: var(--cell); margin-top: var(--pad); }
+.chat { display: flex; align-items: stretch; gap: 0.5rem; margin-top: var(--pad); }
 .chat input { flex: 1; letter-spacing: normal; }
 
 .chat-log,
 .log {
   list-style: none;
-  margin: var(--cell) 0 0;
+  margin: var(--gap) 0 0;
   padding: 0;
   display: grid;
-  gap: 1px;
-  max-height: 16rem;
+  gap: 2px;
+  max-height: 15rem;
   overflow: auto;
+  font-family: var(--font-data);
 }
 .chat-log li {
-  padding: calc(var(--cell) / 2) var(--cell);
-  background: var(--void);
-  border-left: calc(var(--cell) / 2) solid var(--rule);
+  padding: 0.3rem 0.6rem;
+  border-radius: 2px;
+  background: var(--cab-dark);
+  border-left: 3px solid transparent;
+  font-size: 13px;
 }
-.chat-log li[data-mine='true'] { border-left-color: var(--lit); }
-.chat-log .from { color: var(--lit); margin-right: var(--cell); }
+.chat-log li[data-mine='true'] { border-left-color: var(--glow); }
+.chat-log .from { color: var(--dim); margin-right: 0.5rem; }
 
-.diagnostics { padding-top: 0; }
-.diagnostics details { margin-top: var(--pad); }
 .diagnostics summary {
   cursor: pointer;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   list-style: none;
 }
 .diagnostics summary::-webkit-details-marker { display: none; }
-.diagnostics summary::before { content: '[+] '; }
-.diagnostics details[open] > summary::before { content: '[-] '; }
-.diagnostics summary:focus-visible { outline: 2px solid var(--hot); outline-offset: -2px; }
+.diagnostics summary::before { content: '▸ '; color: var(--faint); }
+.diagnostics details[open] > summary::before { content: '▾ '; }
+.diagnostics summary:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.diagnostics details + details { margin-top: var(--gap); }
 .diagnostics pre {
   overflow: auto;
-  margin: var(--cell) 0 0;
-  font-size: 11px;
-  color: var(--ink);
-  background: var(--void);
-  padding: var(--cell);
-  border: 1px solid var(--rule);
-}
-.log li {
+  margin: var(--gap) 0 0;
+  padding: 0.7rem;
+  border-radius: var(--radius);
   font-size: 11px;
   color: var(--dim);
-  white-space: pre-wrap;
-  word-break: break-word;
-  padding: 1px 0;
+  background: #100f14;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
 }
-.log li[data-level='info'] { color: var(--ink); }
-.log li[data-level='warn'] { color: var(--p1); }
+.log li { font-size: 11px; color: var(--faint); white-space: pre-wrap; word-break: break-word; }
+.log li[data-level='info'] { color: var(--dim); }
+.log li[data-level='warn'] { color: #d8a24a; }
 .log li[data-level='error'] { color: var(--ng); }
-.log .ts { color: var(--faint); margin-right: var(--cell); }
+.log .ts { color: #4f4a45; margin-right: 0.5rem; }
 
 /* --------------------------------------------------------------- identity */
 
@@ -933,71 +772,82 @@ input:focus {
  * trap, the backdrop and Escape without any code of ours.
  */
 .identity {
-  width: min(34rem, calc(100vw - var(--pad)));
+  width: min(34rem, calc(100vw - 1.5rem));
   padding: 0;
-  border: 1px solid var(--lit);
-  background: var(--board);
+  border: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--cab-body);
   color: var(--ink);
+  box-shadow: inset 0 1px 0 var(--cab-edge), 0 24px 60px rgba(0, 0, 0, 0.8);
 }
-/* Half the light knocked out with a checkerboard, the way a text-mode screen
-   greys what is behind a modal — it has no alpha to do it with either. */
-.identity::backdrop {
-  background: repeating-conic-gradient(#000000 0% 25%, transparent 0% 50%) 0 0 / 4px 4px,
-    rgba(0, 0, 0, 0.62);
-}
-.identity h2 { font-size: 12px; letter-spacing: 0.26em; }
-.identity-body { display: grid; gap: var(--cell); padding: var(--pad); }
-.identity .error { margin: 0; min-height: 0; }
-.identity .field {
-  margin: var(--cell) 0 0;
-  color: var(--lit);
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-indent: 0.22em;
+.identity::backdrop { background: rgba(4, 4, 6, 0.78); }
+/* Its own lit header, so the dialog reads as a second marquee rather than a
+   floating card. */
+.identity h2 {
+  margin: 0;
+  padding: 0.8rem var(--pad);
+  background: linear-gradient(180deg, var(--glow), var(--glow-dim));
+  color: var(--cab-dark);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
 }
+.identity-body { display: grid; gap: 0.5rem; padding: var(--pad); }
+.identity .field {
+  margin: 0.5rem 0 0;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.identity .error { margin: 0; min-height: 0; }
 .identity menu {
-  margin: var(--cell) 0 0;
+  margin: var(--gap) 0 0;
   padding: 0;
   display: flex;
-  gap: var(--cell);
+  gap: 0.6rem;
   align-items: stretch;
   justify-content: flex-end;
 }
-.identity menu .big { flex: 1; }
+.identity menu .btn-primary { flex: 1; }
 .mic-note {
-  margin: var(--cell) 0 0;
-  padding: var(--cell);
-  background: var(--void);
-  border-left: calc(var(--cell) / 2) solid var(--rule-lit);
+  margin: 0.6rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--cab-dark);
   color: var(--dim);
   font-size: 12px;
-  letter-spacing: 0.04em;
 }
-.mic-note b { color: var(--hot); }
+.mic-note b { color: var(--ink); }
 .mic-note kbd {
   font: inherit;
+  font-family: var(--font-data);
   font-size: 11px;
-  padding: 0 calc(var(--cell) / 2);
-  background: var(--lit);
-  color: var(--void);
+  padding: 0.05rem 0.35rem;
+  border-radius: 2px;
+  background: var(--glow);
+  color: var(--cab-dark);
   font-weight: 700;
 }
 
 .avatar-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 2px;
+  gap: 0.4rem;
 }
 @media (max-width: 30rem) { .avatar-grid { grid-template-columns: repeat(3, 1fr); } }
 
+/* Each token is a blank button cap until you choose one. */
 .avatar-pick {
   display: grid;
   justify-items: center;
-  gap: calc(var(--cell) / 2);
-  padding: var(--cell) calc(var(--cell) / 2);
-  border: 1px solid var(--rule);
-  background: var(--void);
+  gap: 0.3rem;
+  padding: 0.5rem 0.25rem;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #3b3644, #29252f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 2px 0 #14121a;
   color: var(--dim);
   cursor: pointer;
 }
@@ -1010,18 +860,17 @@ input:focus {
   opacity: 0;
   pointer-events: none;
 }
-.avatar-pick:hover { border-color: var(--lit); color: var(--ink); }
-/* Picked is the same inversion the section titles use. */
+.avatar-pick:hover { color: var(--ink); }
 .avatar-pick:has(input:checked) {
-  background: var(--lit);
-  border-color: var(--lit);
-  color: var(--void);
+  color: #2a0d0e;
+  background: linear-gradient(180deg, #f0666a, var(--btn-red));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 0 12px rgba(226, 71, 74, 0.4);
 }
-.avatar-pick:has(input:focus-visible) { outline: 2px solid var(--hot); outline-offset: 2px; }
-.avatar-name { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; }
+.avatar-pick:has(input:focus-visible) { outline: 2px solid var(--glow); outline-offset: 2px; }
+.avatar-name { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
 
 .avatar-art { fill: currentColor; display: block; }
-.avatar-pick .avatar-art { width: 30px; height: 30px; }
+.avatar-pick .avatar-art { width: 28px; height: 28px; }
 
 /* Out of the layout rather than display:none — an <audio> element under
    display:none does play, but not by a wide enough margin to rely on. */
@@ -1032,51 +881,60 @@ input:focus {
   overflow: hidden;
 }
 
-/* --------------------------------------------------------- controls panel */
+/* --------------------------------------------------------- control panel */
 
 /*
- * The controls panel lives outside #view-room, so it is reachable before a
- * room exists. Colours are indirected through local variables because the page
+ * The control panel lives outside #view-room, so it is reachable before a room
+ * exists. Colours are indirected through local variables because the page
  * palette has been renamed twice now; this block does not care which set of
  * names is in force.
  */
 .controls {
-  --ctl-accent: var(--lit, #00ccdd);
-  --ctl-live: var(--ok, #22dd88);
-  --ctl-warn: var(--ng, #ff3311);
-  --ctl-quiet: var(--faint, #336677);
+  --ctl-lit: var(--ok, #47ab5c);
+  --ctl-warn: var(--ng, #e2474a);
+  --ctl-quiet: var(--faint, #6f6862);
 }
 
-.controls-head h2 { flex: none; }
+.controls-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: var(--gap);
+}
+.controls-head h2 { margin: 0; }
 .controls-who {
   font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--hue, var(--ctl-quiet));
 }
 
-/* The pad pill is the whole answer to "is my controller even seen?" — the
+/* The pad lamp is the whole answer to "is my controller even seen?" — the
    Gamepad API stays silent until a button is pressed, which surprises everyone. */
 .pad-pill {
   margin-left: auto;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: calc(var(--cell) / 2) var(--cell);
-  border: 1px solid var(--rule);
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
   color: var(--ctl-quiet);
+  background: #191720;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
   white-space: nowrap;
 }
-.pad-pill[data-state='standard'] { background: var(--ctl-live); border-color: var(--ctl-live); color: var(--void); }
-.pad-pill[data-state='unmapped'] { color: var(--ctl-accent); border-color: var(--ctl-accent); }
+.pad-pill[data-state='standard'] { color: #0d2413; background: var(--ctl-lit); }
+.pad-pill[data-state='unmapped'] { color: var(--cab-dark); background: var(--glow); }
 
 .control-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--cell);
+  gap: 0.4rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 @media (max-width: 46rem) { .control-list { grid-template-columns: 1fr; } }
@@ -1084,111 +942,112 @@ input:focus {
 .control-list li {
   display: flex;
   align-items: center;
-  gap: var(--cell);
-  min-height: calc(var(--cell) * 5);
-  padding: calc(var(--cell) / 2) var(--cell);
-  border: 1px solid var(--rule);
-  border-left: calc(var(--cell) / 2) solid var(--rule-lit);
-  background: var(--void);
+  gap: 0.6rem;
+  min-height: 2.4rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--cab-dark);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: background-color 80ms linear;
 }
 /* Lit while the control is actually down. This is the legend's real job: it is
    how you find out that the stick you just plugged in is stuck on LEFT. */
-.control-list li[data-held='true'] {
-  border-color: var(--ctl-live);
-  background: var(--rail);
-}
-.control-list li[data-capturing='true'] {
-  border-color: var(--ctl-accent);
-  background: var(--rail);
-}
+.control-list li[data-held='true'] { background: #1d2a1f; }
+.control-list li[data-capturing='true'] { background: #2c2820; }
 
-.ctl-label {
-  display: flex;
-  align-items: baseline;
-  gap: var(--cell);
-  min-width: 5.5rem;
+.ctl-label { display: flex; align-items: center; gap: 0.5rem; min-width: 5rem; }
+/* The legend's glyphs are button caps themselves, laid out in panel order, so
+   the legend looks like the thing it describes. */
+.ctl-glyph {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--ink);
+  background: linear-gradient(180deg, #3b3644, #29252f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
-.ctl-glyph { color: var(--ctl-accent); font-size: 13px; }
-.control-list li[data-held='true'] .ctl-glyph { color: var(--ctl-live); }
-.ctl-name { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-.control-list li[data-held='true'] .ctl-name { color: var(--hot); }
+.control-list li[data-held='true'] .ctl-glyph {
+  color: #0d2413;
+  background: linear-gradient(180deg, #6ad07f, var(--ctl-lit));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 8px rgba(71, 171, 92, 0.5);
+}
+.ctl-name { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.control-list li[data-held='true'] .ctl-name { color: var(--ink); }
 
-.ctl-binds { display: flex; flex-wrap: wrap; gap: calc(var(--cell) / 2); align-items: center; }
-.ctl-none { font-size: 11px; color: var(--ctl-warn); letter-spacing: 0.14em; text-transform: uppercase; }
+.ctl-binds { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+.ctl-none { font-size: 11px; color: var(--ctl-warn); letter-spacing: 0.1em; text-transform: uppercase; }
 
 button.bind {
   font: inherit;
+  font-family: var(--font-data);
   font-size: 11px;
-  letter-spacing: 0.08em;
   display: inline-flex;
   align-items: center;
-  gap: calc(var(--cell) / 2);
-  padding: 0 calc(var(--cell) / 2);
-  color: var(--ink);
-  background: var(--board);
-  border: 1px solid var(--rule);
+  gap: 0.25rem;
+  padding: 0.1rem 0.4rem;
+  border: 0;
+  border-radius: 2px;
+  color: var(--dim);
+  background: #100f14;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
   cursor: pointer;
 }
-button.bind:hover { border-color: var(--ctl-accent); }
-button.bind:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
-/* Lit per physical control, not per game button: with three things bound to
-   ATTACK this is what tells you which one fired. */
-button.bind[data-down='true'] {
-  background: var(--ctl-live);
-  border-color: var(--ctl-live);
-  color: var(--void);
-}
+button.bind:hover { color: var(--ink); }
+button.bind:focus-visible { outline: 2px solid var(--glow); outline-offset: 1px; }
+/* Lit per physical control, not per game button: with three things bound to B4
+   this is what tells you which one fired. */
+button.bind[data-down='true'] { color: #0d2413; background: var(--ctl-lit); }
 button.bind[data-source='pad-axis'] { font-style: italic; }
 button.bind.add { color: var(--ctl-quiet); }
-button.bind.add:hover { color: var(--hot); }
+button.bind.add:hover { color: var(--ink); }
 
 .bind .x { color: var(--ctl-quiet); font-size: 12px; line-height: 1; }
 .bind .x:hover { color: var(--ctl-warn); }
-button.bind[data-down='true'] .x { color: var(--void); }
+button.bind[data-down='true'] .x { color: #0d2413; }
 
 /* ------------------------------------------------------------ calibration */
 
 .calib {
   margin-top: var(--pad);
   padding-top: var(--pad);
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
-.calib-row { display: flex; align-items: center; gap: var(--cell); flex-wrap: wrap; }
+.calib-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .calib-row label {
   font-size: 11px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--lit);
+  color: var(--dim);
 }
-.calib-row output {
-  font-size: 11px;
-  color: var(--hot);
-  min-width: 2.6rem;
-}
+.calib-row output { font-family: var(--font-data); font-size: 11px; color: var(--ink); min-width: 2.6rem; }
 /* The global `input` rule is written for text fields; a range needs none of it. */
 .calib-row input[type='range'] {
   flex: 1;
   min-width: 8rem;
   max-width: 18rem;
   padding: 0;
-  border: 0;
   background: transparent;
   box-shadow: none;
-  accent-color: var(--ctl-accent);
+  accent-color: var(--glow);
 }
 
-.axes { list-style: none; margin: var(--pad) 0 0; padding: 0; display: grid; gap: calc(var(--cell) / 2); }
-.axes li { display: flex; align-items: center; gap: var(--cell); font-size: 11px; }
-.axis-name { min-width: 4.5rem; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; }
-.axis-value { min-width: 3rem; text-align: right; color: var(--ctl-quiet); }
+.axes { list-style: none; margin: var(--gap) 0 0; padding: 0; display: grid; gap: 0.3rem; }
+.axes li { display: flex; align-items: center; gap: 0.6rem; font-size: 11px; }
+.axis-name { min-width: 4.5rem; color: var(--dim); letter-spacing: 0.1em; text-transform: uppercase; }
+.axis-value { min-width: 3rem; text-align: right; font-family: var(--font-data); color: var(--ctl-quiet); }
 
 .axis-track {
   position: relative;
   flex: 1;
-  height: var(--cell);
-  background: var(--void);
-  border: 1px solid var(--rule);
+  height: 8px;
+  border-radius: 999px;
+  background: #100f14;
   overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 /* Centre tick: the bar grows out of it, so a resting stick is a flat line and a
    drifting one is visibly not — which is the entire case for calibrating. */
@@ -1199,30 +1058,14 @@ button.bind[data-down='true'] .x { color: var(--void); }
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--rule-lit);
+  background: rgba(255, 255, 255, 0.18);
 }
-.axis-band {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  --dc: var(--rule);
-  background: var(--dither);
-}
-.axis-fill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: var(--ctl-quiet);
-}
+.axis-band { position: absolute; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.07); }
+.axis-fill { position: absolute; top: 0; bottom: 0; background: var(--ctl-quiet); }
 /* Past the deadzone the axis is genuinely pressing a button. */
-.axis-fill[data-live='true'] { background: var(--ctl-live); }
+.axis-fill[data-live='true'] { background: var(--ctl-lit); }
 
-.controls-hint {
-  margin: var(--pad) 0 0;
-  font-size: 11px;
-  color: var(--ctl-quiet);
-  letter-spacing: 0.04em;
-}
+.controls-hint { margin: var(--pad) 0 0; font-size: 12px; color: var(--ctl-quiet); }
 
 /* ------------------------------------------------------- who is talking */
 
@@ -1235,21 +1078,21 @@ button.bind[data-down='true'] .x { color: var(--void); }
 .speaking[hidden] { display: none; }
 .speaking {
   position: absolute;
-  top: var(--cell);
-  right: var(--cell);
-  /* Above the fullscreen CRT overlay (1) and the HUD rows (2). */
+  top: 20px;
+  right: 20px;
+  /* Above the HUD rows (2). */
   z-index: 3;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: calc(var(--cell) / 2);
+  gap: 0.4rem;
   pointer-events: none;
 }
 /*
  * Top-right on purpose: in fullscreen the HUD takes the bottom of the picture,
  * and this would sit on top of it anywhere down there.
  */
-#stage-wrap:fullscreen .speaking { top: var(--pad); right: var(--pad); }
+#stage-wrap:fullscreen .speaking { top: 1rem; right: 1rem; }
 /*
  * And it does NOT fade with the rest of the furniture when the pointer goes
  * idle. Knowing who is talking is worth more mid-fight than the pixels it
@@ -1259,24 +1102,33 @@ button.bind[data-down='true'] .x { color: var(--void); }
 .talker {
   display: flex;
   align-items: center;
-  gap: calc(var(--cell) / 2);
-  padding: calc(var(--cell) / 4) var(--cell) calc(var(--cell) / 4) calc(var(--cell) / 2);
-  border: 1px solid var(--hue, var(--p1));
-  background: var(--void);
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.3rem;
+  border-radius: 999px;
+  background: rgba(12, 11, 14, 0.88);
+  box-shadow: inset 0 0 0 1px var(--hue, var(--btn-red));
   color: var(--hue, var(--ink));
   font-size: 12px;
 }
-.talker > .talker-art { width: 20px; height: 20px; }
-.talker b { font-weight: 400; color: var(--hot); }
+.talker > .talker-art { width: 18px; height: 18px; }
+.talker b { font-weight: 400; color: var(--ink); }
 
 /* The lobby card lights up for the same reason, next to the portrait. */
-.roster li[data-speaking='true'] .portrait-art { border-color: var(--p1); box-shadow: 0 0 0 2px var(--p1); }
+.roster li[data-speaking='true'] .portrait-art {
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 0 0 2px var(--btn-red), 0 0 16px rgba(226, 71, 74, 0.45);
+}
 
 /* ---------------------------------------------------------- reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
-  .coin { animation: none; opacity: 1; }
-  .sysbar::after { animation: none; display: none; }
+  .attract { animation: none; opacity: 1; }
+  .btn,
+  .control-list li,
   .stage-btn,
   #stage-wrap:fullscreen .hud-rows { transition: none; }
+  .btn:active { transform: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .roster li[data-speaking='true'] .portrait-art { transition: box-shadow 90ms linear; }
 }
