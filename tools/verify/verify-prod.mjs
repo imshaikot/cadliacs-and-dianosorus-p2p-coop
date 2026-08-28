@@ -34,6 +34,7 @@ const conn = await connectBrowser(port);
 console.log(`warming… ${await warmUp(conn, APP)}ms`);
 let failure = null;
 
+/** Host only: guests have no file input — the host's copy is sent to them. */
 async function bringUp(tab) {
   await tab.waitFor(
     '!document.getElementById("rom-picker").hidden',
@@ -87,7 +88,20 @@ try {
 
   const guest = await Tab.create(conn, APP, 'GUEST');
   await joinGame(guest, boot.roomCode, { name: 'Bo', avatar: 'coin' });
-  await bringUp(guest);
+  await guest.waitFor('window.__retro.snapshot().selfSlot === 2', 40000, 'guest seated');
+  // Guests are not allowed to load their own game file — the host's copy is
+  // sent over the mesh, and the guest's picker offers no input at all.
+  check(
+    'the guest gets no file input',
+    (await guest.eval('document.getElementById("rom-bar").hidden')) === true,
+  );
+  await guest.waitFor(
+    'window.__retro.snapshot().emulator?.running === true',
+    120000,
+    'guest running the game file the host sent',
+  );
+  const romLog = guest.console.find((c) => /game file received from a peer/.test(c.text));
+  check('and runs the copy the host sent', Boolean(romLog), romLog?.text ?? 'not logged');
   await guest.waitFor('window.__retro.snapshot().netplay?.running === true', 90000, 'guest in lockstep');
   await host.waitFor('window.__retro.snapshot().netplay?.running === true', 60000, 'host in lockstep');
   check('two production peers reach lockstep', true);

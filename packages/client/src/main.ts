@@ -54,6 +54,12 @@ const ui = new UI({
   },
   onChat: (text) => session?.sendChat(text),
   onRomPicked: (file) => {
+    // Guests have no file input, but a DOM is not an access control. The rule
+    // is: the host picks the game, everyone else is sent the host's copy.
+    if (session?.role === 'guest') {
+      log.warn('guests cannot load their own game file, the host picks it');
+      return;
+    }
     void loadRomFromFile(file)
       .then((rom) => startEmulation(rom))
       .catch((err) => {

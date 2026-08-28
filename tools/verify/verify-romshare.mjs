@@ -72,6 +72,10 @@ try {
 
   await joinGame(guest, snap.roomCode, { name: 'Bo', avatar: 'coin' });
   await guest.waitFor('window.__retro.snapshot().selfSlot === 2', 40000, 'guest seated');
+  check(
+    'a guest is offered no file input — only the host loads a game',
+    (await guest.eval('document.getElementById("rom-bar").hidden')) === true,
+  );
 
   /*
    * Watch the host's clock during the send.
