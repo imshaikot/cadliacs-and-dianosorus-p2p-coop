@@ -15,12 +15,17 @@ import type { RomSource } from '../emulator/rom.js';
  *
  * Two rules shape everything here.
  *
- * **It cannot stall a frame.** The same invariant voice lives under. A game file
- * is ~250x a savestate, and pushing 256 chunks into the channel in one go blocks
- * the main thread long enough to drop frames for everyone in the room, not just
- * the peer receiving it. So the send is paced: a small batch, then yield to the
- * event loop, then the next. It finishes in about a second and nobody's clock
- * notices.
+ * **It cannot stall a frame** — the same invariant voice lives under. The send is
+ * paced: a small batch, then a yield to the event loop, then the next.
+ *
+ * Being straight about how much that buys: it was measured. Pushing a 4 MB
+ * romset — 256 chunks — in a single unpaced burst moved the host's worst gap
+ * between frames by nothing anyone could see (24ms unpaced against 41ms paced,
+ * both inside normal jitter for two emulators on one machine). At the sizes a
+ * CPS romset actually comes in, the pacing is not load-bearing. It is kept
+ * because MAX_ROM_BYTES allows 64 MB, which is 4096 chunks, and because a
+ * bounded batch is the difference between a send whose cost scales with the file
+ * and one whose cost per turn is fixed.
  *
  * **The bytes are checked before they are trusted.** A peer controls this
  * payload. It is size-capped before a buffer is allocated and fingerprinted

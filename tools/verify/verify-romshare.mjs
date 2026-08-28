@@ -5,10 +5,9 @@
  * of one, so the only way it can reach lockstep is if the host's copy actually
  * arrived over the mesh.
  *
- * The second half is the part that would be easy to get quietly wrong: a 4 MB
- * push in one go blocks the main thread and drops frames for the whole room. So
- * the host's frame clock is watched across the transfer, and it has to keep
- * advancing at close to full speed the entire time.
+ * The second half watches the host's frame clock across the transfer. It is a
+ * regression guard rather than a proof that the sender's pacing is required —
+ * see the note where it is measured.
  */
 import { mkdirSync } from 'node:fs';
 import { launchChrome, connectBrowser, warmUp, Tab, sleep } from './cdp.mjs';
@@ -75,37 +74,46 @@ try {
   await guest.waitFor('window.__retro.snapshot().selfSlot === 2', 40000, 'guest seated');
 
   /*
-   * Watch the host's clock *during* the send, sampled often enough to catch a
-   * stall rather than average one away. An average over the whole transfer
-   * would hide a 300ms freeze; the worst single window will not.
+   * Watch the host's clock during the send.
+   *
+   * Sampling fps over the transfer from out here does not work: it is over in a
+   * couple of hundred milliseconds, so there are only two or three samples, and
+   * the guest is booting a 6 MB core on the same machine at the same moment —
+   * the number that comes back measures CPU contention, not this code.
+   *
+   * The longest gap between two frames does work as a measurement. Be clear on
+   * what it establishes, though: removing the pacing entirely still passes this,
+   * because 256 sends are simply not enough to block the thread. It is a
+   * regression guard on the clock, not evidence that the pacing is doing work at
+   * this file size. See the note in romshare.ts.
    */
-  const samples = [];
-  let running = false;
-  const deadline = Date.now() + 90000;
-  let last = { f: await host.eval('window.__retro.snapshot().emulator.frames'), t: Date.now() };
-  while (Date.now() < deadline) {
-    await sleep(100);
-    const f = await host.eval('window.__retro.snapshot().emulator.frames');
-    const t = Date.now();
-    samples.push({ frames: f - last.f, ms: t - last.t });
-    last = { f, t };
-    if (await guest.eval('window.__retro.snapshot().emulator?.running === true')) {
-      running = true;
-      break;
-    }
-  }
+  await host.eval(`(() => {
+    const m = window.__retro.machine();
+    window.__gap = { max: 0, last: performance.now(), frames: 0 };
+    m.frameAdvanced.on(() => {
+      const now = performance.now();
+      window.__gap.max = Math.max(window.__gap.max, now - window.__gap.last);
+      window.__gap.last = now;
+      window.__gap.frames += 1;
+    });
+    return true;
+  })()`);
+
+  const running = await guest.waitFor(
+    'window.__retro.snapshot().emulator?.running === true',
+    90000,
+    'guest boots the game file it was sent',
+  );
   check('the guest never picked a file, yet is running one', running === true);
 
   const romLog = guest.console.find((c) => /game file received from a peer/.test(c.text));
   check('and it came from a peer', Boolean(romLog), romLog?.text ?? 'not logged');
 
-  // Each sample spans ~100ms plus the round trip of the eval, so normalise.
-  const rates = samples.filter((s) => s.ms > 50).map((s) => (s.frames / s.ms) * 1000);
-  const worst = rates.length ? Math.min(...rates) : 0;
+  const gap = await host.eval('window.__gap');
   check(
-    'the host never stalled while sending',
-    worst > 45,
-    `worst ${worst.toFixed(1)} fps of ${rates.length} windows across the transfer`,
+    'the host clock keeps running through the transfer',
+    gap.max < 150 && gap.frames > 5,
+    `longest gap between frames ${gap.max.toFixed(0)}ms over ${gap.frames} frames (one frame is 16.8ms)`,
   );
 
   // --- and the two simulations agree ---------------------------------------
