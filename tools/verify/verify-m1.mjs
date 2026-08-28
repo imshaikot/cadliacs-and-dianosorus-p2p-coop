@@ -56,7 +56,7 @@ try {
   check('core reports the CPS-1 refresh rate, not 60Hz', Math.abs(emu.targetFps - 59.63) < 0.01, `${emu.targetFps} Hz`);
   check('core reports its real audio rate', Math.abs(emu.sampleRate - 48002.15) < 0.5, `${emu.sampleRate} Hz`);
 
-  const romLog = host.console.find((c) => /ROM loaded/.test(c.text));
+  const romLog = host.console.find((c) => /game file loaded/.test(c.text));
   check('ROM came from roms/ via the dev server', /from: dev-server/.test(romLog?.text ?? ''), romLog?.text ?? 'not logged');
   check('FBNeo identified the romset', host.console.some((c) => /Romset description:/.test(c.text)));
 
