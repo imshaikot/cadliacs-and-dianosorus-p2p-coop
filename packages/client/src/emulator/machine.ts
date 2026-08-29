@@ -1,10 +1,12 @@
-import { Signal } from '@retro/shared';
+import { DEFAULT_SYSTEM, Signal } from '@retro/shared';
+import type { SystemId } from '@retro/shared';
 
 import { EmulatorAudio } from './audio.js';
 import type { AudioStats } from './audio.js';
 import { FbneoCore } from './fbneo.js';
 import { InputLatch } from './input.js';
 import { Renderer } from './renderer.js';
+import type { RomSource } from './rom.js';
 
 /** Player 1 is the host; guests drive 2 and 3. Ports are zero-based. */
 export const PORT_COUNT = 3;
@@ -43,6 +45,8 @@ export interface FrameDriver {
 export interface MachineOptions {
   canvas?: HTMLCanvasElement;
   onLog?: (line: string) => void;
+  /** Which core to bring up. One machine, one core, for its whole life. */
+  system?: SystemId;
 }
 
 /**
@@ -122,14 +126,25 @@ export class Machine {
     this.#onLog = onLog;
   }
 
+  /**
+   * A machine is built around one core and keeps it for life. Changing the
+   * emulated hardware means disposing this one and booting another — which is
+   * only ever allowed before a game is loaded, so nothing is ever thrown away
+   * mid-frame.
+   */
   static async boot(options: MachineOptions = {}): Promise<Machine> {
-    const core = await FbneoCore.load(options.onLog);
+    const core = await FbneoCore.load(options.system ?? DEFAULT_SYSTEM, options.onLog);
     const renderer = new Renderer(options.canvas);
     return new Machine(core, renderer, options.onLog);
   }
 
-  loadRom(fileName: string, bytes: Uint8Array): void {
-    this.core.loadRom(fileName, bytes);
+  /** Which core this machine is running. Fixed at boot. */
+  get system(): SystemId {
+    return this.core.system;
+  }
+
+  loadRom(rom: RomSource): void {
+    this.core.loadRom(rom.name, rom.bytes, rom.extras);
     this.#frameMs = 1000 / this.core.fps;
     this.#onLog?.(
       `core reports ${this.core.fps.toFixed(2)}Hz and ${this.core.sampleRate.toFixed(2)}Hz audio`,

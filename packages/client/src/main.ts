@@ -1,12 +1,13 @@
-import { DEFAULT_CAPACITY, generateRoomCode, normalizeRoomCode } from '@retro/shared';
-import type { ChannelDiagnostics, PeerStats, PeerId } from '@retro/shared';
+import { DEFAULT_CAPACITY, DEFAULT_SYSTEM, generateRoomCode, normalizeRoomCode } from '@retro/shared';
+import type { ChannelDiagnostics, PeerStats, PeerId, SystemId } from '@retro/shared';
 
 import { loadConfig } from './config.js';
 import { ControlsPanel } from './controls-panel.js';
 import { LocalControls } from './emulator/controls.js';
 import { Machine } from './emulator/machine.js';
-import { loadRomFromDevServer, loadRomFromFile } from './emulator/rom.js';
+import { checkDriver, explainRefusal, loadRomFromDevServer, pickRom } from './emulator/rom.js';
 import type { RomSource } from './emulator/rom.js';
+import { systemInfo } from './emulator/systems.js';
 import { Log } from './log.js';
 import { Netplay } from './net/netplay.js';
 import { RomShare } from './net/romshare.js';
@@ -28,6 +29,23 @@ let voice: Voice | null = null;
 let hudTimer: number | null = null;
 /** Guards the microphone toggle, which now has to await getUserMedia. */
 let micBusy = false;
+/**
+ * Which core boot is the current one.
+ *
+ * The host can change its mind twice before the first six megabytes have
+ * finished arriving, so every boot carries a token and a boot that finds itself
+ * superseded throws its own machine away rather than installing it.
+ */
+let bootToken = 0;
+/**
+ * The boot in flight, so a second request for the same core joins it instead of
+ * downloading six megabytes a second time. A guest hits this every join: it
+ * starts the default core the moment it has a room, and the host's `welcome`
+ * naming a different one lands a few milliseconds later.
+ */
+let booting: { system: SystemId; done: Promise<Machine | null> } | null = null;
+/** One game gets loaded, once. Two sources race for it — see startEmulation. */
+let romStarting = false;
 
 // Physical controls outlive any one room: the profile, the gamepad poll and the
 // on-screen legend are all page-scoped, and only the latch they feed changes
@@ -53,21 +71,26 @@ const ui = new UI({
     if (session) ui.renderRoster(session.players, (id) => voice?.isPeerAudible(id) ?? true);
   },
   onChat: (text) => session?.sendChat(text),
-  onRomPicked: (file) => {
+  onRomPicked: (files) => {
     // Guests have no file input, but a DOM is not an access control. The rule
     // is: the host picks the game, everyone else is sent the host's copy.
     if (session?.role === 'guest') {
       log.warn('guests cannot load their own game file, the host picks it');
       return;
     }
-    void loadRomFromFile(file)
-      .then((rom) => startEmulation(rom))
-      .catch((err) => {
-        log.error('that file will not do', { message: err instanceof Error ? err.message : String(err) });
-        ui.showStageMessage('That is not a zip archive. Pick your game\u2019s .zip file.');
+    const system = session?.system ?? DEFAULT_SYSTEM;
+    void pickRom(files, system).then((pick) => {
+      if (!pick.ok) {
+        log.warn('that file will not do', { message: pick.message, system });
+        ui.showRomError(pick.message);
         ui.showRomPicker(true);
-      });
+        return;
+      }
+      ui.showRomError('');
+      void startEmulation(pick.rom);
+    });
   },
+  onSystemPicked: (system) => chooseSystem(system),
 });
 
 ui.setBroker(config.brokerDescription);
@@ -168,7 +191,7 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
   });
   session = next;
   romShare = new RomShare(next.transport, log, {
-    onReceived: (rom) => startEmulation(rom),
+    onReceived: (rom) => void startEmulation(rom),
     onProgress: (fraction, detail) => ui.showRomProgress(fraction, detail),
   });
   mic.attach(next.transport, ui.voiceSinks);
@@ -193,6 +216,12 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
   });
   next.chat.on((entry) => ui.appendChat(entry));
   next.statusChanged.on((status, detail) => ui.setStatus(status, detail));
+  // Fires for the host's own pick and for a guest being told the host's. Both
+  // ends do the same thing with it: show it, and bring up that core.
+  next.systemChanged.on((system) => {
+    ui.setSystem(system);
+    void ensureEmulator();
+  });
 
   try {
     await next.start();
@@ -216,47 +245,127 @@ async function begin(role: 'host' | 'guest', roomCode: string, identity: Identit
   }
 
   ui.showRoom(role, next.roomCode);
+  ui.setSystem(next.system);
+  ui.lockSystem(role !== 'host');
   // The URL now names the room, so a refresh or a shared tab lands somewhere
   // meaningful instead of on a bare landing page.
   router.navigate(`/room/${next.roomCode}`);
   ui.setBusy(false);
 
   // Every peer runs its own emulator; we synchronise inputs, not pixels.
-  void bootEmulator();
+  void ensureEmulator();
   // Gotcha #1 evidence, printed as soon as the channels actually exist rather
   // than assumed from the PeerJS docs.
   startChannelWatch();
 }
 
 /**
+ * Host only: change the room's emulator.
+ *
+ * The rule the whole feature hangs on is "before the game, not after" — every
+ * peer has to be running the same core for lockstep to mean anything, and
+ * swapping one out from under a live game would mean re-deriving a savestate
+ * for hardware that never produced it. The control is disabled once a game
+ * loads; this is the check behind that, because a disabled control is a
+ * courtesy and not an enforcement.
+ */
+function chooseSystem(system: SystemId): void {
+  const s = session;
+  if (!s || s.role !== 'host' || s.system === system) return;
+  if (machine?.core.loaded) {
+    log.warn('the emulator is fixed once a game is loaded', { system: s.system });
+    ui.setSystem(s.system);
+    return;
+  }
+  ui.showRomError('');
+  // Session broadcasts and emits; the emit is what actually swaps the core, so
+  // the host and the guests take exactly the same path from here.
+  s.setSystem(system);
+}
+
+/**
+ * Bring up the core for `system`, replacing whatever is running.
+ *
+ * Only ever called with no game loaded, so "replacing" is never mid-frame.
+ * The token guards the case that made this awkward: six megabytes take long
+ * enough to fetch that a host can change its mind twice while the first one is
+ * still in flight, and the loser must not install itself over the winner.
+ */
+async function useSystem(system: SystemId): Promise<Machine | null> {
+  if (machine?.system === system) return machine;
+  if (booting?.system === system) return booting.done;
+  const done = bootSystem(system, (bootToken += 1));
+  booting = { system, done };
+  const result = await done;
+  if (booting?.done === done) booting = null;
+  return result;
+}
+
+/** Drop the running core, and make sure nothing in flight installs itself over it. */
+async function discardMachine(): Promise<void> {
+  bootToken += 1;
+  booting = null;
+  const m = machine;
+  machine = null;
+  if (m) await m.dispose();
+}
+
+async function bootSystem(system: SystemId, token: number): Promise<Machine | null> {
+  const previous = machine;
+  machine = null;
+  if (previous) await previous.dispose();
+  if (token !== bootToken) return null;
+
+  const info = systemInfo(system);
+  ui.showStageMessage(`loading the ${info.label} emulator…`);
+  let next: Machine;
+  try {
+    next = await Machine.boot({ canvas: ui.screen, system, onLog: onCoreLog });
+  } catch (err) {
+    log.error('the emulator core failed to load', {
+      system,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    ui.showStageMessage('The emulator core failed to load. See the log.');
+    return null;
+  }
+  if (token !== bootToken) {
+    // Somebody picked again while this one was downloading. Throw it away.
+    await next.dispose();
+    return null;
+  }
+  machine = next;
+  // Sample the gamepad on the emulator's clock rather than the display's.
+  next.onBeforeFrame = () => controls.poll();
+  log.info('emulator core loaded', { system, label: info.label });
+  return next;
+}
+
+/**
  * Boot sequence, identical for every peer: WASM core first, then the ROM, then
  * the clock. Guests are not spectators — they simulate the same game.
+ *
+ * Entered on joining a room and again every time the room's emulator changes,
+ * so it has to be safe to re-enter. It is: `useSystem` is a no-op when the core
+ * asked for is already the one running, and everything after it either finds a
+ * game or settles into waiting for one, both of which are idempotent.
  *
  * Audio needs a user gesture (gotcha #6). The HOST A GAME click is that
  * gesture, and it counts for the rest of the page's life — the browser's
  * "sticky activation" does not expire the way transient activation does — so
  * the awaits in here do not cost us the right to start an AudioContext.
  */
-async function bootEmulator(): Promise<void> {
-  if (machine) return;
-  ui.showStageMessage('loading the emulator core…');
-  try {
-    machine = await Machine.boot({ canvas: ui.screen, onLog: onCoreLog });
-  } catch (err) {
-    log.error('the emulator core failed to load', {
-      message: err instanceof Error ? err.message : String(err),
-    });
-    ui.showStageMessage('The emulator core failed to load. See the log.');
-    return;
-  }
-  // Sample the gamepad on the emulator's clock rather than the display's.
-  machine.onBeforeFrame = () => controls.poll();
-  log.info('emulator core loaded');
+async function ensureEmulator(): Promise<void> {
+  const m = await useSystem(session?.system ?? DEFAULT_SYSTEM);
+  // Null means this boot lost to a newer pick — a guest told the host's choice
+  // while its default core was still downloading, typically. That pick's own
+  // call is still running and owns everything below.
+  if (!m || m.core.loaded) return;
 
   ui.showStageMessage('looking for a game…');
   const rom = await loadRomFromDevServer();
   if (rom) {
-    startEmulation(rom);
+    await startEmulation(rom);
     return;
   }
   /*
@@ -271,42 +380,89 @@ async function bootEmulator(): Promise<void> {
   ui.showRomPicker(true);
 }
 
-function startEmulation(rom: RomSource): void {
-  const m = machine;
-  if (!m) return;
-  ui.showRomPicker(false);
-  ui.showStageMessage('starting…');
+/**
+ * Load a game and start the clock.
+ *
+ * The romset carries the core it belongs to, so this is also the one place that
+ * can find itself holding Neo Geo bytes on a CPS machine — a guest whose host
+ * changed its mind, or the dev-server shortcut, where the filename decides.
+ * Swapping first and loading second means there is exactly one code path for
+ * "the right core is running", rather than a check at every caller.
+ */
+async function startEmulation(rom: RomSource): Promise<void> {
+  if (romStarting || machine?.core.loaded) return;
+  romStarting = true;
   try {
-    m.loadRom(rom.name, rom.bytes);
-  } catch (err) {
-    log.error('the ROM would not load', {
-      name: rom.name,
-      bytes: rom.bytes.length,
-      message: err instanceof Error ? err.message : String(err),
-    });
-    ui.showStageMessage('FBNeo rejected that ROM. See the log.');
-    ui.showRomPicker(true);
-    return;
-  }
-  log.info('game file loaded', { name: rom.name, bytes: rom.bytes.length, from: rom.origin });
-  ui.setRomNote(rom.name, rom.origin);
-  // Now we can answer anyone else who is stuck at the same point we were.
-  void romShare?.setMine(rom);
-
-  void m.start().then(
-    async () => {
-      ui.showScreen();
-      log.info('emulator running', { fps: m.core.fps, sampleRate: m.core.sampleRate });
-      startHud();
-      await joinNetplay(m);
-    },
-    (err: unknown) => {
-      log.error('the emulator would not start', {
+    const m = await useSystem(rom.system);
+    if (!m) return;
+    /*
+     * The name gate again, for the origins that did not come through the
+     * picker — a peer's copy, or the dev server's. FBNeo will happily "load" a
+     * zip it has no driver for and then emulate nothing at a fictional 60Hz,
+     * so this is the difference between a sentence and a black screen.
+     */
+    const wrong = checkDriver(rom.name, rom.system);
+    if (wrong) {
+      log.error('that game is not for this emulator', { name: rom.name, system: rom.system });
+      ui.showRomError(wrong);
+      ui.showRomPicker(true);
+      return;
+    }
+    ui.showRomPicker(false);
+    ui.showStageMessage('starting…');
+    try {
+      m.loadRom(rom);
+    } catch (err) {
+      log.error('the ROM would not load', {
+        name: rom.name,
+        bytes: rom.bytes.length,
+        system: rom.system,
         message: err instanceof Error ? err.message : String(err),
       });
-      ui.showStageMessage('Could not start the emulator. See the log.');
-    },
-  );
+      // FBNeo's refusal is a bare zero, so the reason is reconstructed from
+      // what we know about the name and the BIOS. See explainRefusal.
+      ui.showRomError(explainRefusal(rom));
+      ui.showRomPicker(true);
+      /*
+       * Throw the core away rather than let the next pick land on top.
+       * `retro_load_game` half-succeeded — it wrote a romset into the FS and
+       * left a machine behind — and there is no `retro_unload_game` exported to
+       * undo that. A fresh instance is the only clean state, and it costs a
+       * re-instantiation of an already-cached module, not another download.
+       */
+      await discardMachine();
+      return;
+    }
+    log.info('game file loaded', {
+      name: rom.name,
+      bytes: rom.bytes.length,
+      alongside: rom.extras.map((e) => e.name),
+      system: rom.system,
+      from: rom.origin,
+    });
+    // The core is settled for the life of the room from here.
+    ui.lockSystem(true);
+    ui.setRomNote(rom.name, rom.origin, rom.system);
+    // Now we can answer anyone else who is stuck at the same point we were.
+    void romShare?.setMine(rom);
+
+    await m.start().then(
+      async () => {
+        ui.showScreen();
+        log.info('emulator running', { fps: m.core.fps, sampleRate: m.core.sampleRate });
+        startHud();
+        await joinNetplay(m);
+      },
+      (err: unknown) => {
+        log.error('the emulator would not start', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+        ui.showStageMessage('Could not start the emulator. See the log.');
+      },
+    );
+  } finally {
+    romStarting = false;
+  }
 }
 
 /**
@@ -433,9 +589,15 @@ async function teardown(reason: string): Promise<void> {
   voice = null;
   romShare?.dispose();
   romShare = null;
+  // Any core still downloading belongs to the room we are leaving.
+  bootToken += 1;
+  booting = null;
+  romStarting = false;
   const m = machine;
   machine = null;
   if (m) await m.dispose();
+  ui.lockSystem(false);
+  ui.showRomError('');
   ui.hideHud();
   ui.showStageMessage('waiting');
   session?.close(reason);
@@ -498,6 +660,7 @@ window.__retro = {
     selfSlot: session?.selfSlot ?? null,
     roomCode: session?.roomCode ?? null,
     prettyRoomCode: session?.prettyRoomCode ?? null,
+    system: session?.system ?? null,
     fullscreen: ui.fullscreen,
     players: session?.players ?? [],
     voice: voice
@@ -514,7 +677,14 @@ window.__retro = {
       : null,
     channels: session?.describeChannels() ?? [],
     emulator: machine
-      ? { running: machine.running, targetFps: machine.core.fps, sampleRate: machine.core.sampleRate, ...machine.stats }
+      ? {
+          system: machine.system,
+          romLoaded: machine.core.loaded,
+          running: machine.running,
+          targetFps: machine.core.fps,
+          sampleRate: machine.core.sampleRate,
+          ...machine.stats,
+        }
       : null,
     netplay: netplay && machine
       ? {

@@ -645,7 +645,70 @@ input:focus {
   border: 1px solid var(--line);
 }
 .rom-bar input { background: transparent; box-shadow: none; border: 0; padding: 0; font-size: 12px; }
+/* The browser draws this one itself, and its default is a light-grey OS button
+   in the middle of a dark panel. Dressed as a ghost button like every other
+   secondary action on the page. */
+.rom-bar input[type='file']::file-selector-button {
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-right: 0.6rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--dim);
+  background: var(--panel-lit);
+  border: 1px solid var(--line-lit);
+}
+.rom-bar input[type='file']::file-selector-button:hover {
+  color: var(--ink);
+  border-color: var(--faint);
+}
 .rom-why { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.6; }
+
+/* Which machine, above which game. Reads as one labelled control. */
+.rom-system { display: grid; gap: 0.3rem; }
+.rom-system .field {
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+/*
+  A native select, dressed to match the text inputs. The arrow is drawn here
+  rather than left to the platform, because the platform's is black-on-white and
+  this control sits in a recessed well.
+*/
+.rom-system select {
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  appearance: none;
+  width: 100%;
+  padding: 0.5rem 2rem 0.5rem 0.7rem;
+  border: 1px solid var(--line-lit);
+  border-radius: 7px;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--dim) 50%) calc(100% - 15px) 50% / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--dim) 50%, transparent 50%) calc(100% - 10px) 50% / 5px 5px no-repeat,
+    var(--panel-lit);
+  color: var(--ink);
+}
+.rom-system select:focus-visible { outline: 2px solid var(--coin); outline-offset: 2px; }
+.rom-system select:disabled { opacity: 0.55; cursor: not-allowed; }
+/* The options themselves are drawn by the OS, which does not inherit any of the
+   above — naming both colours is what stops a white-on-white menu. */
+.rom-system select option { background: var(--panel); color: var(--ink); }
+
+/* The games each emulator is for, in titles rather than board names. */
+.rom-hint { margin: -0.15rem 0 0; color: var(--dim); font-size: 11.5px; line-height: 1.6; }
+.rom-hint b { color: var(--ink); font-weight: 600; }
+
+/* Sits inside the picker so the fault and the control that caused it are one
+   object. Collapses to nothing when empty — see the shared .error rule. */
+.rom-error { margin: 0.7rem 0 0; min-height: 0; text-align: left; }
 /* The guest's half of the picker: nothing to do, and it says so. */
 .rom-wait { margin: 0; color: var(--dim); font-size: 12.5px; line-height: 1.6; }
 

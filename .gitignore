@@ -18,3 +18,7 @@ tools/verify/shots/
 # Legally-dumped ROM sets. NEVER commit these.
 roms/*
 !roms/README.md
+
+# Emscripten toolchain, FBNeo checkout and core build output.
+tools/core/.work/
+tools/core/out/

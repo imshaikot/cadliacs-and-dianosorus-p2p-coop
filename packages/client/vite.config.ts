@@ -46,13 +46,26 @@ export default defineConfig(({ mode, command }) => {
    * is chosen from the file's own name — so guessing a filename here would be
    * both wrong and a statement about which game this project is for. Unset means
    * the picker, which is exactly what a production build always gets.
+   *
+   * The name also settles which emulator boots: this is the one path with no
+   * dropdown on it, so `mslug.zip` has to be enough to mean Neo Geo. See rom.ts.
    */
-  const romFile = env['VITE_ROM_FILE'] ?? '';
-  const devRomUrl = command === 'serve' && romFile ? `/@fs${repoRoot}roms/${romFile}` : '';
+  const serving = command === 'serve';
+  const fromRoms = (name: string): string => (serving && name ? `/@fs${repoRoot}roms/${name}` : '');
+  const devRomUrl = fromRoms(env['VITE_ROM_FILE'] ?? '');
+  /**
+   * Neo Geo drivers boot through a BIOS romset, so the dev shortcut needs two
+   * files where CPS needs one. Unset is right for CPS and for anyone who has
+   * merged the BIOS into their game zip.
+   */
+  const devRomBiosUrl = fromRoms(env['VITE_ROM_BIOS_FILE'] ?? '');
 
   return {
     envDir: repoRoot,
-    define: { __DEV_ROM_URL__: JSON.stringify(devRomUrl) },
+    define: {
+      __DEV_ROM_URL__: JSON.stringify(devRomUrl),
+      __DEV_ROM_BIOS_URL__: JSON.stringify(devRomBiosUrl),
+    },
     // The shared package is consumed as TypeScript source, not as a build
     // artifact: one less build step, and edits hot-reload.
     resolve: { alias: { '@retro/shared': sharedEntry } },

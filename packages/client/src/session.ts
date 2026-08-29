@@ -1,5 +1,6 @@
 import {
   DEFAULT_CAPACITY,
+  DEFAULT_SYSTEM,
   GUEST_SLOTS,
   PROTOCOL_VERSION,
   PeerJsTransport,
@@ -8,6 +9,7 @@ import {
   coerceAvatar,
   coerceCapacity,
   coerceName,
+  coerceSystem,
   formatRoomCode,
 } from '@retro/shared';
 import type {
@@ -18,6 +20,7 @@ import type {
   PeerId,
   PeerStats,
   PlayerSlot,
+  SystemId,
   Transport,
   TransportError,
   TransportRole,
@@ -89,6 +92,11 @@ export class Session {
   #roomCode: string;
   /** Host: what was chosen at the door. Guest: what the host said in `welcome`. */
   #capacity: number = DEFAULT_CAPACITY;
+  /**
+   * Which arcade hardware the room runs. The host's to choose and only until it
+   * loads a game; everyone else is told, in `welcome` and again if it changes.
+   */
+  #system: SystemId = DEFAULT_SYSTEM;
   #status: TransportStatus = 'idle';
   #unsubscribes: Unsubscribe[] = [];
 
@@ -97,6 +105,8 @@ export class Session {
   readonly statusChanged = new Signal<[TransportStatus, string]>();
   /** The host refused us — room full, or a protocol mismatch. */
   readonly rejected = new Signal<[string]>();
+  /** The room's emulator changed. Fires on the host's own pick too. */
+  readonly systemChanged = new Signal<[SystemId]>();
 
   constructor(options: SessionOptions) {
     this.role = options.role;
@@ -135,6 +145,10 @@ export class Session {
   get capacity(): number {
     return this.#capacity;
   }
+  /** The arcade hardware everyone in this room is emulating. */
+  get system(): SystemId {
+    return this.#system;
+  }
   get status(): TransportStatus {
     return this.#status;
   }
@@ -149,6 +163,21 @@ export class Session {
   }
   get players(): Player[] {
     return [...this.#players.values()].sort((a, b) => a.slot - b.slot);
+  }
+
+  /**
+   * Host only: change the emulator, and tell the room.
+   *
+   * Nothing here enforces "before a game is loaded" — that is a policy about
+   * the *emulator*, and it is enforced where the emulator lives. This is the
+   * transport half: remember it, and say it once.
+   */
+  setSystem(id: SystemId): void {
+    if (this.role !== 'host' || this.#system === id) return;
+    this.#system = id;
+    this.#transport.sendControl({ t: 'system', id });
+    this.#log.info('room emulator set', { system: id });
+    this.systemChanged.emit(id);
   }
 
   /**
@@ -300,6 +329,7 @@ export class Session {
             label: this.#label,
             avatar: this.#avatar,
             capacity: this.#capacity,
+            system: this.#system,
           },
           from,
         );
@@ -311,6 +341,7 @@ export class Session {
         if (this.role !== 'guest' || this.#selfId === null) return;
         this.#selfSlot = msg.slot;
         this.#capacity = coerceCapacity(msg.capacity);
+        this.#adoptSystem(coerceSystem(msg.system));
         const host = this.#players.get(from);
         if (host) {
           host.label = nameOr(msg.label, HOST_SLOT);
@@ -349,6 +380,13 @@ export class Session {
         this.#transport.disconnectPeer(from, `bye: ${msg.reason}`);
         return;
       }
+      case 'system': {
+        // Only the host chooses. A guest announcing one is either confused or
+        // malicious, and either way it is not the room's hardware.
+        if (this.role !== 'guest' || this.#players.get(from)?.slot !== HOST_SLOT) return;
+        this.#adoptSystem(coerceSystem(msg.id));
+        return;
+      }
       case 'voice': {
         const player = this.#players.get(from);
         if (!player || player.muted === msg.muted) return;
@@ -364,6 +402,14 @@ export class Session {
         return;
       }
     }
+  }
+
+  /** Guest side: take the host's word for it, once, and say so once. */
+  #adoptSystem(id: SystemId): void {
+    if (this.#system === id) return;
+    this.#system = id;
+    this.#log.info('the host is running a different emulator', { system: id });
+    this.systemChanged.emit(id);
   }
 
   #onError(err: TransportError): void {

@@ -1,12 +1,59 @@
-import createFBNeo from './core/fbneo_cps12.mjs';
-import type { FbneoWasm } from './core/fbneo_cps12.mjs';
-import wasmUrl from './core/fbneo_cps12.wasm?url';
+import type { SystemId } from '@retro/shared';
+
+import type { FbneoModuleOptions, FbneoWasm } from './core/fbneo_cps12.mjs';
+import cps12WasmUrl from './core/fbneo_cps12.wasm?url';
+import neogeoWasmUrl from './core/fbneo_neogeo.wasm?url';
+import type { RomFile } from './rom.js';
 
 /**
  * Thin typed skin over the WASM core. Deliberately owns no timing and no
  * policy: it exposes one-frame-at-a-time execution and nothing else, because
  * the whole netcode design depends on us deciding when a frame happens.
  */
+
+/**
+ * One core per hardware family, and only the selected one is ever fetched.
+ *
+ * The glue is behind a dynamic import so the bundler splits it: choosing CPS
+ * never downloads six megabytes of Neo Geo. The `?url` imports beside it are
+ * only strings — Emscripten fetches the `.wasm` when the factory runs, not when
+ * the module is imported — so naming both here costs nothing.
+ */
+type FbneoFactory = (options?: FbneoModuleOptions) => Promise<FbneoWasm>;
+
+const CORES: Readonly<Record<SystemId, () => Promise<{ create: FbneoFactory; wasmUrl: string }>>> = {
+  cps12: async () => ({
+    create: (await import('./core/fbneo_cps12.mjs')).default,
+    wasmUrl: cps12WasmUrl,
+  }),
+  neogeo: async () => ({
+    create: (await import('./core/fbneo_neogeo.mjs')).default,
+    wasmUrl: neogeoWasmUrl,
+  }),
+};
+
+/**
+ * Did `retro_load_game` actually start anything?
+ *
+ * It says true either way. Handed a zip it has no driver for — or one it does,
+ * whose ROMs are missing, which for Neo Geo means *the BIOS is not there* — it
+ * logs "None of those archives was found in your paths", returns success, and
+ * leaves the machine at the libretro defaults. The frontend then runs a clock
+ * against nothing: measured, 149 frames "advanced" onto a black canvas with no
+ * error raised anywhere.
+ *
+ * Exactly 60.000000Hz into exactly 48000Hz is that default, and it is not a
+ * game: CPS-1 is 59.6294Hz into 48002.15Hz and Neo Geo is 59.185606Hz, because
+ * FBNeo nudges the sample rate to a whole number of samples per frame. Neither
+ * subset contains a driver that could produce this pair, so it means one thing.
+ *
+ * A third subset could, in principle, hold a genuine 60.000Hz machine. It would
+ * be refused with the "set is incomplete" message, which is wrong but visible —
+ * far better than the silence this replaces.
+ */
+function isEmptyMachine(fps: number, sampleRate: number): boolean {
+  return fps === 60 && sampleRate === 48000;
+}
 
 /** RETRO_PIXEL_FORMAT_*. FBNeo gives us XRGB8888 once we accept it. */
 export const PIXEL_XRGB8888 = 1;
@@ -29,6 +76,7 @@ export interface InputDescriptor {
 }
 
 export class FbneoCore {
+  readonly system: SystemId;
   #m: FbneoWasm;
   #fps = 0;
   #sampleRate = 0;
@@ -36,12 +84,14 @@ export class FbneoCore {
   #stateBuf = 0;
   #stateSize = 0;
 
-  private constructor(module: FbneoWasm) {
+  private constructor(system: SystemId, module: FbneoWasm) {
+    this.system = system;
     this.#m = module;
   }
 
-  static async load(onLog?: (line: string) => void): Promise<FbneoCore> {
-    const module = await createFBNeo({
+  static async load(system: SystemId, onLog?: (line: string) => void): Promise<FbneoCore> {
+    const { create, wasmUrl } = await (CORES[system] ?? CORES.cps12)();
+    const module = await create({
       // Vite rewrites the .wasm to a hashed asset URL; without this the
       // Emscripten glue would look for it next to the .mjs and 404 in prod.
       locateFile: () => wasmUrl,
@@ -50,7 +100,7 @@ export class FbneoCore {
     });
     module._fe_install();
     module._retro_init();
-    return new FbneoCore(module);
+    return new FbneoCore(system, module);
   }
 
   /**
@@ -58,13 +108,18 @@ export class FbneoCore {
    * buffer — it wants a path and opens the zip itself. We hand it one inside
    * the Emscripten in-memory filesystem. Nothing touches the network, and the
    * driver is chosen purely from the basename: sf2.zip -> driver `sf2`.
+   *
+   * `alongside` is written into the same directory and never named to the core.
+   * FBNeo goes looking for the driver's board ROM by itself — every Neo Geo
+   * driver boots through `neogeo.zip` — and finds it there or refuses the game.
    */
-  loadRom(fileName: string, bytes: Uint8Array): void {
+  loadRom(fileName: string, bytes: Uint8Array, alongside: readonly RomFile[] = []): void {
     if (this.#loaded) throw new Error('a ROM is already loaded');
     const m = this.#m;
     for (const dir of ['/roms', '/fbneo', '/fbneo/system', '/fbneo/save']) {
       if (!m.FS.analyzePath(dir).exists) m.FS.mkdir(dir);
     }
+    for (const file of alongside) m.FS.writeFile(`/roms/${file.name}`, file.bytes);
     const path = `/roms/${fileName}`;
     m.FS.writeFile(path, bytes);
     const ptr = m.stringToNewUTF8(path);
@@ -73,12 +128,17 @@ export class FbneoCore {
     } finally {
       m._free(ptr);
     }
+    const fps = m._fe_fps();
+    const sampleRate = m._fe_srate();
+    if (isEmptyMachine(fps, sampleRate)) {
+      throw new Error(`FBNeo started no driver for ${fileName}`);
+    }
     this.#loaded = true;
-    this.#fps = m._fe_fps();
-    this.#sampleRate = m._fe_srate();
+    this.#fps = fps;
+    this.#sampleRate = sampleRate;
   }
 
-  /** ~59.63 for CPS-1, which is the entire reason for the accumulator. */
+  /** ~59.63 for CPS-1, ~59.19 for Neo Geo. The accumulator exists for this. */
   get fps(): number {
     return this.#fps;
   }

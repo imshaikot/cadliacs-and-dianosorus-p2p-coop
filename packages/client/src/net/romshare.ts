@@ -1,5 +1,12 @@
-import { StateAssembler, chunkRom, decodeRomChunk } from '@retro/shared';
-import type { ControlMessage, PeerId, Transport } from '@retro/shared';
+import {
+  StateAssembler,
+  chunkRom,
+  coerceSystem,
+  decodeRomBundle,
+  decodeRomChunk,
+  encodeRomBundle,
+} from '@retro/shared';
+import type { ControlMessage, PeerId, SystemId, Transport } from '@retro/shared';
 
 import type { Log } from '../log.js';
 import type { RomSource } from '../emulator/rom.js';
@@ -31,6 +38,10 @@ import type { RomSource } from '../emulator/rom.js';
  * payload. It is size-capped before a buffer is allocated and fingerprinted
  * before it is handed to the emulator, so a truncated or swapped file fails as a
  * message rather than as a mysterious desync twenty seconds into a fight.
+ *
+ * What travels is a *bundle*, not a file — the game plus anything its driver
+ * boots through, which for Neo Geo is the BIOS. One transfer, one hash, one
+ * arrival, however many files are inside it. See `rom-bundle.ts`.
  */
 
 /** Bigger than any CPS-1/2 romset, small enough that a bad actor cannot OOM us. */
@@ -43,9 +54,13 @@ const CHUNKS_PER_TICK = 8;
 const TRANSFER_TIMEOUT_MS = 60_000;
 
 export interface RomOffer {
+  /** The game's own filename, for the log and the progress line. */
   name: string;
+  /** Size of the whole bundle, which is what actually crosses the wire. */
   bytes: number;
   sha256: string;
+  /** Which core these bytes are for. A guest boots that one and no other. */
+  system: SystemId;
 }
 
 export interface RomShareCallbacks {
@@ -71,6 +86,8 @@ export class RomShare {
 
   /** What we hold, once we have it — this is what we can offer others. */
   #mine: RomSource | null = null;
+  /** The encoded bundle, kept so a second peer's request is not a second encode. */
+  #mineBundle: Uint8Array | null = null;
   #mineHash = '';
   /** Offers we have been given, by peer, so we know who to ask. */
   #offers = new Map<PeerId, RomOffer>();
@@ -90,10 +107,12 @@ export class RomShare {
     );
   }
 
-  /** Called once we have a file of our own, however we came by it. */
+  /** Called once we have a game of our own, however we came by it. */
   async setMine(rom: RomSource): Promise<void> {
+    const bundle = encodeRomBundle([{ name: rom.name, bytes: rom.bytes }, ...rom.extras]);
     this.#mine = rom;
-    this.#mineHash = await fingerprint(rom.bytes);
+    this.#mineBundle = bundle;
+    this.#mineHash = await fingerprint(bundle);
     this.#requested = false;
     this.#receiving = null;
     this.#cb.onProgress(null, '');
@@ -101,8 +120,13 @@ export class RomShare {
   }
 
   get offer(): RomOffer | null {
-    if (!this.#mine) return null;
-    return { name: this.#mine.name, bytes: this.#mine.bytes.length, sha256: this.#mineHash };
+    if (!this.#mine || !this.#mineBundle) return null;
+    return {
+      name: this.#mine.name,
+      bytes: this.#mineBundle.length,
+      sha256: this.#mineHash,
+      system: this.#mine.system,
+    };
   }
 
   /** Announce what we hold. To one peer, or to everyone when `to` is omitted. */
@@ -145,7 +169,12 @@ export class RomShare {
   onControl(from: PeerId, msg: ControlMessage): void {
     switch (msg.t) {
       case 'rom-offer': {
-        const offer = { name: String(msg.name), bytes: Number(msg.bytes), sha256: String(msg.sha256) };
+        const offer: RomOffer = {
+          name: String(msg.name),
+          bytes: Number(msg.bytes),
+          sha256: String(msg.sha256),
+          system: coerceSystem(msg.system),
+        };
         if (!Number.isFinite(offer.bytes) || offer.bytes <= 0 || offer.bytes > MAX_ROM_BYTES) return;
         this.#offers.set(from, offer);
         // Both of us already have a file: say so now rather than letting the
@@ -167,11 +196,11 @@ export class RomShare {
         return;
       }
       case 'rom-request': {
-        if (!this.#mine) {
+        if (!this.#mineBundle) {
           this.#transport.sendControl({ t: 'rom-decline', reason: 'I have no game loaded' }, from);
           return;
         }
-        void this.#send(from, this.#mine.bytes);
+        void this.#send(from, this.#mineBundle);
         return;
       }
       case 'rom-decline': {
@@ -201,6 +230,8 @@ export class RomShare {
     this.#unsubscribes = [];
     this.#offers.clear();
     this.#receiving = null;
+    this.#mine = null;
+    this.#mineBundle = null;
   }
 
   /**
@@ -257,14 +288,39 @@ export class RomShare {
         expected: offer.sha256.slice(0, 12),
         got: hash.slice(0, 12),
       });
-      this.#receiving = null;
-      this.#requested = false;
-      this.#cb.onProgress(null, 'that file arrived damaged — load one yourself');
+      this.#fail('that file arrived damaged — load one yourself');
       return;
     }
-    this.#log.info('game file received from a peer', { name: offer.name, bytes: bytes.length });
+    // Unpacked only after the fingerprint agrees, so a bundle that fails to
+    // parse is a bug in us rather than something a peer could have caused.
+    const files = decodeRomBundle(bytes);
+    const [game, ...extras] = files ?? [];
+    if (!game) {
+      this.#log.error('the game file we received was not a readable bundle', { from: offer.name });
+      this.#fail('that transfer was not readable — load a file yourself');
+      return;
+    }
+    this.#log.info('game file received from a peer', {
+      name: game.name,
+      bytes: bytes.length,
+      alongside: extras.map((e) => e.name),
+      system: offer.system,
+    });
     this.#receiving = null;
     this.#cb.onProgress(null, '');
-    this.#cb.onReceived({ name: offer.name, bytes, origin: 'peer' });
+    this.#cb.onReceived({
+      name: game.name,
+      bytes: game.bytes,
+      extras,
+      origin: 'peer',
+      system: offer.system,
+    });
+  }
+
+  /** Abandon whatever was in flight and say why, leaving the picker usable. */
+  #fail(detail: string): void {
+    this.#receiving = null;
+    this.#requested = false;
+    this.#cb.onProgress(null, detail);
   }
 }

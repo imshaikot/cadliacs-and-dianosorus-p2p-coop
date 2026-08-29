@@ -189,16 +189,34 @@
             <div class="rom-picker" id="rom-picker" hidden>
               <p id="rom-picker-lead">Load a game to start the emulator.</p>
               <div class="rom-bar" id="rom-bar">
-                <input type="file" id="rom-file" accept=".zip,application/zip" />
+                <!--
+                  Which machine, before which game. Only the host sees this, and
+                  only until a game is loaded: the core is chosen once and kept
+                  for the life of the room, because every peer has to be running
+                  the same one for lockstep to mean anything.
+                -->
+                <label class="rom-system" for="rom-system">
+                  <span class="field">Emulator</span>
+                  <select id="rom-system"></select>
+                </label>
+                <p class="rom-hint" id="rom-hint"></p>
+                <input type="file" id="rom-file" accept=".zip,application/zip" multiple />
                 <p class="rom-why">
-                  This player ships no games. Load a CPS-1 or CPS-2 romset zip you
-                  are entitled to use — the driver is read from the filename.
+                  This player ships no games. Load a romset zip you are entitled to
+                  use — the driver is read from the filename, so it has to keep it.
                 </p>
               </div>
               <p class="rom-wait" id="rom-wait" hidden>
-                The host picks the game and it is sent to you automatically —
-                nothing to do on your side.
+                The host picks the emulator and the game, and it is sent to you
+                automatically — nothing to do on your side.
               </p>
+              <!--
+                The one fault the player can actually fix. It says which
+                emulator the file belongs to, so it is worth more than the
+                stage's one-line placeholder and gets to sit next to the input
+                that caused it.
+              -->
+              <p class="error rom-error" id="rom-error"></p>
               <p class="rom-progress" id="rom-progress" hidden aria-live="polite"></p>
             </div>
             <button class="btn btn-ghost btn-small stage-btn" id="btn-fullscreen" type="button" hidden

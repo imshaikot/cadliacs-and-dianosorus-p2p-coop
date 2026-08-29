@@ -12,16 +12,52 @@ basis of this project's input synchronisation. See ARCHITECTURE.md.
 ## Rebuilding
 
 ```sh
-tools/core/build.sh
-cp <output> packages/client/src/emulator/core/
+tools/core/build.sh            # cps12  — CPS-1 + CPS-2 (the default)
+tools/core/build.sh neogeo     # neogeo — Neo Geo MVS/AES
+cp tools/core/out/<subset>/fbneo_<subset>.{mjs,wasm,drivers.json} \
+   packages/client/src/emulator/core/
 ```
 
-Needs: git, perl, a native C++ compiler, and ~10 minutes for the first run
-(most of it downloading emsdk). Rebuilds after that take about 10 seconds.
+The argument is FBNeo's own subset name: it needs a `Makefile.<subset>` in
+`src/burner/libretro`. Nothing else about the two builds differs, which is the
+point — one core per hardware family, and the frontend picks between them.
+
+Needs: git, perl, **Python 3.10+**, a native C++ compiler, and ~10 minutes for
+the first run (most of it downloading emsdk). Rebuilds after that take about 10
+seconds. macOS still ships Python 3.9 as `python3` and emsdk refuses it, so the
+script picks an interpreter by version rather than by name.
+
+Everything downloaded or generated lives in `tools/core/.work/` and
+`tools/core/out/`, both gitignored, so building a second subset costs seconds
+rather than another emsdk download. Objects land next to their sources in the
+FBNeo tree, so the script wipes them when the subset changes and only then.
 
 Pinned to FBNeo commit `f3b7749` and emsdk `3.1.74`. The build output is
 vendored in `packages/client/src/emulator/core/` so none of this is needed to
 just run the app.
+
+## The driver manifest
+
+`drivers.mjs` writes `fbneo_<subset>.drivers.json` — every romset name the core
+was built with. This is not a convenience:
+
+> **FBNeo's refusal is not a refusal.** `retro_load_game` returns *true* for a
+> zip whose basename matches no driver, then reports the libretro defaults
+> (exactly 60.00Hz, exactly 48000Hz — no CPS or Neo Geo board runs at either)
+> and the frontend starts a machine that emulates nothing. Measured with a
+> 64-byte file named `Metal Slug (1996).zip`: 89 frames "ran", black canvas, not
+> one error anywhere.
+
+It does the same for a name it *does* have whose ROMs are missing — which for
+Neo Geo means the BIOS is absent, easily the most common mistake.
+
+So the frontend checks the name against the manifest before handing over any
+bytes, using FBNeo's own rule — the basename, and nothing else — and then checks
+the AV info afterwards, because the libretro defaults are a pair no CPS or Neo
+Geo driver produces. Two sources are intersected to build the manifest:
+`driverlist.h`, generated per subset, says which drivers were linked but holds C
+symbols; the driver sources hold the romset names but all of them. The
+intersection is this core's names and only those.
 
 ## Two things that will bite you if you change the build
 

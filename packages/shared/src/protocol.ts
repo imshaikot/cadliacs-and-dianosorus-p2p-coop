@@ -24,8 +24,13 @@
  * v3 added the room's `capacity` to `welcome` and the `rom-*` messages. A v2
  * peer would count the lobby to the wrong number and could neither offer a game
  * file nor be told the host's fingerprint, so again: reject, do not limp.
+ *
+ * v4 added the room's emulated hardware — `system` on `welcome` and `rom-offer`,
+ * plus the `system` message the host sends when it changes its mind. A v3 peer
+ * would assume CPS and boot the wrong core against Neo Geo bytes, which reads
+ * as a corrupt romset rather than as a version problem. Reject.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** Player 1 is always the host (it owns the emulator). Guests fill 2 and 3. */
 export type PlayerSlot = 1 | 2 | 3;
@@ -57,9 +62,11 @@ export type ControlMessage =
   /** guest -> host, first thing sent on the control channel. */
   | { t: 'hello'; protocol: number; label: string; avatar: string }
   /**
-   * host -> guest, in reply to hello. `slot` is the emulator port to drive, and
-   * `capacity` is how many the host opened the room for, so a guest can show
-   * "2 of 2" rather than always counting up to MAX_PLAYERS.
+   * host -> guest, in reply to hello. `slot` is the emulator port to drive,
+   * `capacity` is how many the host opened the room for — so a guest can show
+   * "2 of 2" rather than always counting up to MAX_PLAYERS — and `system` is
+   * the hardware the host has selected, so the guest loads that core once
+   * instead of loading CPS and swapping when the offer lands.
    */
   | {
       t: 'welcome';
@@ -68,6 +75,7 @@ export type ControlMessage =
       label: string;
       avatar: string;
       capacity: number;
+      system: string;
     }
   /** host -> guest, when the room is full or the protocol does not match. */
   | { t: 'reject'; reason: string }
@@ -95,14 +103,26 @@ export type ControlMessage =
   /** guest -> host: my core is up and I have a game file, deal me in. */
   | { t: 'ready'; port: number }
   /**
+   * host -> everyone: the emulator I am about to run.
+   *
+   * Only ever sent before a game is loaded — switching hardware under a running
+   * game is not a thing this offers — so a guest that acts on it is always
+   * swapping an idle core, never a live one.
+   */
+  | { t: 'system'; id: string }
+  /**
    * host -> guest: I have a game loaded, and here is what it is.
    *
    * `sha256` is the point of this message even when nobody wants the bytes: two
    * peers running different dumps of the same romset diverge, and the desync
    * counter would report it a minute later with no clue why. Comparing the
    * fingerprint at the door turns that into a sentence.
+   *
+   * `bytes` and the fingerprint describe the *bundle* — the game and anything it
+   * needs beside it, a Neo Geo BIOS typically — not the game zip alone. See
+   * rom-bundle.ts.
    */
-  | { t: 'rom-offer'; name: string; bytes: number; sha256: string }
+  | { t: 'rom-offer'; name: string; bytes: number; sha256: string; system: string }
   /** guest -> host: I have no game file, send me yours. */
   | { t: 'rom-request' }
   /** host -> guest: I cannot, and this is why. */
@@ -155,6 +175,7 @@ export function decodeControl(raw: unknown): ControlMessage | null {
     case 'begun':
     case 'desync':
     case 'voice':
+    case 'system':
     case 'rom-offer':
     case 'rom-request':
     case 'rom-decline':

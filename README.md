@@ -1,7 +1,8 @@
 # Retro P2P — arcade co-op in your browser
 
-Two or three people, two or three browsers, one arcade cabinet. Load a CPS-1 or
-CPS-2 romset and play its built-in multiplayer mode together over WebRTC.
+Two or three people, two or three browsers, one arcade cabinet. Load a CPS-1,
+CPS-2 or Neo Geo romset and play its built-in multiplayer mode together over
+WebRTC.
 
 **Every player runs their own emulator; we synchronise inputs, not pixels.** A
 frame is simulated only once every player's input for it has arrived, so all
@@ -15,8 +16,8 @@ video stream.
 
 - Node 20+ and Yarn 4 (the repo pins its own Yarn, so nothing to install)
 - A Chromium- or Firefox-based browser
-- A CPS-1 or CPS-2 romset zip you are entitled to use. **This player ships no
-  games and downloads none** — there is no code path that could.
+- A romset zip you are entitled to use. **This player ships no games and
+  downloads none** — there is no code path that could.
 
 ## Install
 
@@ -32,8 +33,10 @@ To skip the file picker while developing, drop a zip in `roms/` and name it:
 VITE_ROM_FILE=yourgame.zip
 ```
 
-The driver is read from the filename, so `sf2.zip` boots `sf2`. There is no
-default, and a production build has no such path at all.
+The driver is read from the filename, so `sf2.zip` boots `sf2` — and the name
+also settles which emulator comes up, since this path has no dropdown on it. For
+Neo Geo add `VITE_ROM_BIOS_FILE=neogeo.zip`. There is no default, and a
+production build has no such path at all.
 
 No Emscripten toolchain is needed — the emulator core is built ahead of time and
 vendored.
@@ -49,10 +52,23 @@ host is player 1; guests get 2 and 3 in join order.
 Nothing starts before that first click, on purpose: browsers refuse to open an
 `AudioContext` without a real user gesture, and that click is the gesture.
 
+**Two emulators, one at a time.** Above the file picker the host chooses the
+hardware: **CPS-1 / CPS-2** for Street Fighter II, Final Fight, Cadillacs and
+Dinosaurs; **Neo Geo** for Metal Slug, The King of Fighters, Samurai Shodown,
+Garou. Only the host chooses, only before the game is loaded, and everyone else
+is switched to match — every player has to be running the same machine for the
+synchronisation to mean anything. Only the core you chose is downloaded.
+
+Load the wrong one and it says so by name rather than failing quietly: *"dino.zip
+is a CPS-1 / CPS-2 game (Capcom). Switch the emulator to CPS-1 / CPS-2, then load
+it again."* Neo Geo games need the `neogeo.zip` BIOS picked alongside the game —
+select both at once.
+
 **You only need one copy between you.** Whoever loads a game first offers it to
 the room, and anyone without one receives it over the same peer-to-peer mesh the
-game runs on. You can always load your own file instead. The line under the
-picture says which game is loaded and whose copy it is.
+game runs on — the BIOS travels with it. You can always load your own file
+instead. The line under the picture says which game is loaded, what it is running
+on, and whose copy it is.
 
 **Controls**
 
@@ -87,7 +103,7 @@ seconds.
 
 | | |
 |---|---|
-| emulator | [FBNeo](https://github.com/finalburnneo/FBNeo) CPS-1/CPS-2 drivers, compiled to WebAssembly |
+| emulator | [FBNeo](https://github.com/finalburnneo/FBNeo) CPS-1/CPS-2 and Neo Geo drivers, compiled to WebAssembly as one core each |
 | transport | WebRTC data channels via [PeerJS](https://peerjs.com), behind a swappable `Transport` interface |
 | sync | deterministic lockstep — inputs and savestates only, never video |
 | audio clock | `AudioWorklet` metronome, because `requestAnimationFrame` stops in a backgrounded tab |

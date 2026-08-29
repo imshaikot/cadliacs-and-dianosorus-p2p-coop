@@ -8,11 +8,12 @@ import {
   coerceName,
   formatRoomCode,
 } from '@retro/shared';
-import type { AvatarId, ChannelDiagnostics, PeerId, TransportStatus } from '@retro/shared';
+import type { AvatarId, ChannelDiagnostics, PeerId, SystemId, TransportStatus } from '@retro/shared';
 
 import { avatarDefs, avatarName, avatarSvg } from './avatars.js';
 import { isTyping } from './emulator/input.js';
 import type { MachineStats } from './emulator/machine.js';
+import { ALL_SYSTEMS, systemInfo } from './emulator/systems.js';
 import type { LockstepStats } from './net/lockstep.js';
 import type { LogEntry } from './log.js';
 import { joinLink } from './router.js';
@@ -61,7 +62,13 @@ export interface UICallbacks {
   onJoin: (rawCode: string, identity: Identity) => void;
   onLeave: () => void;
   onChat: (text: string) => void;
-  onRomPicked: (file: File) => void;
+  /**
+   * One pick, however many files are in it: a Neo Geo game arrives with its
+   * BIOS beside it, and both halves of that are one decision by one person.
+   */
+  onRomPicked: (files: File[]) => void;
+  /** Host only, and only before a game is loaded. */
+  onSystemPicked: (system: SystemId) => void;
   onToggleMic: () => void;
   /** Silence one player for this listener only. */
   onPeerAudible: (peerId: PeerId, audible: boolean) => void;
@@ -97,6 +104,9 @@ export class UI {
   readonly #romBar = must<HTMLElement>('rom-bar');
   readonly #romWait = must<HTMLElement>('rom-wait');
   readonly #romFile = must<HTMLInputElement>('rom-file');
+  readonly #romSystem = must<HTMLSelectElement>('rom-system');
+  readonly #romHint = must<HTMLElement>('rom-hint');
+  readonly #romError = must<HTMLElement>('rom-error');
   readonly #romProgress = must<HTMLElement>('rom-progress');
   readonly #romNote = must<HTMLElement>('rom-note');
   readonly #hud = must<HTMLElement>('emu-hud');
@@ -195,8 +205,22 @@ export class UI {
       this.#chatInput.value = '';
     });
     this.#romFile.addEventListener('change', () => {
-      const file = this.#romFile.files?.[0];
-      if (file) cb.onRomPicked(file);
+      const files = [...(this.#romFile.files ?? [])];
+      // Cleared so picking the same file twice after a rejection still fires a
+      // change event — otherwise a corrected pick of the same name does nothing.
+      this.#romFile.value = '';
+      if (files.length > 0) cb.onRomPicked(files);
+    });
+
+    for (const system of ALL_SYSTEMS) {
+      const option = document.createElement('option');
+      option.value = system.id;
+      option.textContent = `${system.label} · ${system.maker}`;
+      this.#romSystem.append(option);
+    }
+    this.#romSystem.addEventListener('change', () => {
+      const picked = ALL_SYSTEMS.find((s) => s.id === this.#romSystem.value);
+      if (picked) cb.onSystemPicked(picked.id);
     });
     this.#btnCopy.addEventListener('click', () => {
       void navigator.clipboard?.writeText(this.#shareText);
@@ -456,10 +480,12 @@ export class UI {
     // A host shares a link; a guest has nothing useful to hand on but the code.
     this.#shareText = role === 'host' ? joinLink(roomCode) : formatRoomCode(roomCode);
     this.#btnCopy.title = this.#shareText;
-    // Settled here, not when the picker shows: only the host may load a file.
-    // A guest is sent the host's copy, so its picker is a waiting line.
+    // Settled here, not when the picker shows: only the host may load a file or
+    // choose the emulator. A guest is sent the host's copy and told the host's
+    // choice, so its picker is a waiting line.
     this.#romBar.hidden = role !== 'host';
     this.#romWait.hidden = role === 'host';
+    this.showRomError('');
   }
 
   showLanding(): void {
@@ -689,10 +715,10 @@ export class UI {
     else this.#romProgress.style.setProperty('--fraction', `${Math.round(fraction * 100)}%`);
   }
 
-  /** Names the loaded game and whose copy it is, under the picture. */
-  setRomNote(name: string, origin: 'dev-server' | 'file' | 'peer'): void {
+  /** Names the loaded game, the machine it is running on, and whose copy it is. */
+  setRomNote(name: string, origin: 'dev-server' | 'file' | 'peer', system: SystemId): void {
     const from = origin === 'peer' ? 'sent by a player in this room' : 'your file';
-    this.#romNote.textContent = `${name} · ${from}`;
+    this.#romNote.textContent = `${name} · ${systemInfo(system).label} · ${from}`;
     this.#romNote.hidden = false;
   }
 
@@ -708,11 +734,49 @@ export class UI {
     if (show) this.#btnFull.hidden = true;
   }
 
+  /**
+   * Show which emulator the room is on, and say what it is for.
+   *
+   * The hint names games rather than boards, because "CPS-2" answers a question
+   * nobody arrives with and "Street Fighter II" answers the one they do.
+   */
+  setSystem(system: SystemId): void {
+    const info = systemInfo(system);
+    this.#romSystem.value = info.id;
+    const name = document.createElement('b');
+    name.textContent = info.label;
+    this.#romHint.replaceChildren(name, ` — ${info.examples.join(', ')}`);
+    if (info.bios) {
+      const bios = document.createElement('b');
+      bios.textContent = `${info.bios}.zip`;
+      this.#romHint.append(', and the ', bios, ' BIOS beside the game');
+    }
+    this.#romHint.append('.');
+  }
+
+  /**
+   * Freeze the choice.
+   *
+   * A room's core is fixed the moment a game loads into it: every peer has to be
+   * running the same one, and swapping it under a live lockstep game is not a
+   * thing this offers. Disabled rather than hidden, so the room can still see
+   * what it is playing on.
+   */
+  lockSystem(locked: boolean): void {
+    this.#romSystem.disabled = locked;
+  }
+
+  /** The fault the player can fix. Empty string clears it. */
+  showRomError(message: string): void {
+    this.#romError.textContent = message;
+  }
+
   showScreen(): void {
     this.#screen.hidden = false;
     this.#stageMessage.hidden = true;
     this.#romPicker.hidden = true;
     this.#btnFull.hidden = false;
+    this.showRomError('');
   }
 
   setNetStatus(phase: string, detail: string): void {
