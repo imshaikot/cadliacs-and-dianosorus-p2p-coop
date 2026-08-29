@@ -112,9 +112,6 @@ seconds.
 Runtime dependencies are `peerjs`, `vite` and `typescript`. That is the whole
 list — the emulator core, the router and the test harness each add nothing.
 
-Deeper notes on how the pieces fit live in
-[ARCHITECTURE.md](./ARCHITECTURE.md).
-
 ## Licence
 
 The core is FBNeo, which is **not** free software: non-commercial use only, no

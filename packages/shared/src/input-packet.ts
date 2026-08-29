@@ -1,9 +1,10 @@
 /**
  * Binary messages on the unreliable-ish input channel.
  *
- * The channel is unordered but still retransmitted (see ARCHITECTURE.md), so
- * every byte does arrive — just not necessarily in order. Both message kinds
- * below are therefore self-describing and order-independent.
+ * The channel is unordered but still retransmitted — see the `verdict` line the
+ * transport logs when a channel opens — so every byte does arrive, just not
+ * necessarily in order. Both message kinds below are therefore self-describing
+ * and order-independent.
  */
 export const WireKind = {
   Input: 0x01,

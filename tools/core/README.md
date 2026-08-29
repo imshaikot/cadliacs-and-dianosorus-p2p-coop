@@ -7,7 +7,7 @@ frontend that lets us call it.
 This is deliberately not EmulatorJS and not the RetroArch web build. Both of
 those wrap the core in a frontend that owns the main loop, which makes
 frame-stepped execution impossible — and frame-stepped execution is the whole
-basis of this project's input synchronisation. See ARCHITECTURE.md.
+basis of this project's input synchronisation.
 
 ## Rebuilding
 
