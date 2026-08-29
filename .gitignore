@@ -22,3 +22,7 @@ roms/*
 # Emscripten toolchain, FBNeo checkout and core build output.
 tools/core/.work/
 tools/core/out/
+
+# Local notes, kept out of the repository.
+/ARCHITECTURE.md
+/CLAUDE.md
