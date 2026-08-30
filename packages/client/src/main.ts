@@ -2,6 +2,7 @@ import { DEFAULT_CAPACITY, DEFAULT_SYSTEM, generateRoomCode, normalizeRoomCode }
 import type { ChannelDiagnostics, PeerStats, PeerId, SystemId } from '@retro/shared';
 
 import { loadConfig } from './config.js';
+import { ControllerDialog } from './controller-dialog.js';
 import { ControlsPanel } from './controls-panel.js';
 import { LocalControls } from './emulator/controls.js';
 import { Machine } from './emulator/machine.js';
@@ -52,6 +53,10 @@ let romStarting = false;
 // when we join or leave.
 const controls = new LocalControls();
 const controlsPanel = new ControlsPanel(controls);
+// Page-scoped like the panel: a stick is worth testing and calibrating before
+// there is a room to take it into.
+const controllerDialog = new ControllerDialog(controls);
+controlsPanel.onOpenController(() => controllerDialog.open());
 
 const ui = new UI({
   onHost: (identity) => void begin('host', generateRoomCode(), identity),
@@ -581,6 +586,7 @@ async function teardown(reason: string): Promise<void> {
     clearInterval(hudTimer);
     hudTimer = null;
   }
+  controllerDialog.close();
   controls.attach(null);
   controlsPanel.setSlot(null);
   netplay?.detach();
@@ -631,6 +637,7 @@ declare global {
       session: () => Session | null;
       machine: () => Machine | null;
       controls: () => LocalControls;
+      controller: () => ControllerDialog;
       netplay: () => Netplay | null;
       voice: () => Voice | null;
       channels: () => ChannelDiagnostics[];
@@ -649,6 +656,7 @@ window.__retro = {
   session: () => session,
   machine: () => machine,
   controls: () => controls,
+  controller: () => controllerDialog,
   netplay: () => netplay,
   voice: () => voice,
   channels: () => session?.describeChannels() ?? [],
@@ -694,6 +702,24 @@ window.__retro = {
           rttByPort: netplay.rttByPort,
         }
       : null,
+    controls: {
+      padId: controls.pad?.id ?? null,
+      standard: controls.pad?.standard ?? null,
+      // Rest- and travel-corrected, which is what the deadzone is compared
+      // against and therefore what a calibration check has to look at.
+      axes: controls.pad?.corrected ?? null,
+      raw: controls.pad?.raw ?? null,
+      deadzone: controls.profile.deadzone,
+      calibrated: controls.isCalibrated(),
+      calibration: controls.calibration,
+      restJitter: controls.restJitter,
+      suggestedDeadzone: controls.suggestedDeadzone,
+      // Zero while the controller dialog is open — sweeping a stick must not
+      // drive the game. See LocalControls.setSuspended.
+      suspended: controls.suspended,
+      mask: controls.mask,
+      dialogOpen: controllerDialog.isOpen,
+    },
     logCount: log.entries.length,
   }),
 };

@@ -19,7 +19,10 @@ import { Signal } from '@retro/shared';
 import {
   MAX_DEADZONE,
   MIN_DEADZONE,
+  MIN_TRAVEL,
+  NO_TRAVEL,
   clamp,
+  correctAxis,
   defaultProfile,
   loadProfile,
   saveProfile,
@@ -52,8 +55,30 @@ export interface PadSnapshot {
 const CAPTURE_AXIS_THRESHOLD = 0.6;
 /** A pad button counts as pressed above this. Analogue triggers report a float. */
 const BUTTON_THRESHOLD = 0.5;
-/** Polls averaged by `calibrate()`. About half a second of rest at frame rate. */
+/** Polls averaged by centring. About half a second of rest at frame rate. */
 const CALIBRATION_SAMPLES = 30;
+
+/**
+ * What the two calibration phases are for.
+ *
+ * `centre` learns where the sticks sit untouched; `sweep` learns how far they
+ * actually go. They are separate because they want opposite things from the
+ * player — hands off, then hands on — and a single pass that tried to infer
+ * both would have to guess which of the two a given sample was.
+ */
+export type CalibrationPhase = 'centre' | 'sweep';
+
+export interface CalibrationState {
+  readonly phase: CalibrationPhase;
+  /** 0..1. Samples collected for `centre`; axes swept far enough for `sweep`. */
+  readonly progress: number;
+  /** Travel seen so far this sweep, per axis, either side of rest. */
+  readonly travel: ReadonlyArray<readonly [number, number]>;
+}
+
+type CalibrationRun =
+  | { phase: 'centre'; id: string; sum: number[]; lo: number[]; hi: number[]; samples: number }
+  | { phase: 'sweep'; id: string; lo: number[]; hi: number[] };
 
 interface Capture {
   resolve: (binding: Binding) => void;
@@ -73,10 +98,26 @@ export class LocalControls {
   #down = new Set<string>();
   #latch: InputLatch | null = null;
   #applied = 0;
+  /**
+   * Held, but not driving anything.
+   *
+   * Calibration asks the player to sweep both sticks into every corner. Doing
+   * that while the game is live would run the character across the screen — and
+   * under lockstep that is not a private embarrassment, it is published to
+   * everyone. Suspending releases what is held and stops applying, without
+   * forgetting which latch we belong to.
+   */
+  #suspended = false;
 
   #pad: PadSnapshot | null = null;
   #capture: Capture | null = null;
-  #calibration: { sum: number[]; samples: number; id: string } | null = null;
+  #calibration: CalibrationRun | null = null;
+  /**
+   * How far the sticks wandered while the player was not touching them, from
+   * the last centring pass. This is the only honest basis for a deadzone
+   * suggestion: the number has to clear the noise this particular pad makes.
+   */
+  #jitter: number | null = null;
 
   constructor(profile: ControlProfile = loadProfile()) {
     this.#profile = profile;
@@ -111,9 +152,34 @@ export class LocalControls {
     return this.#capture !== null;
   }
 
-  /** 0..1 while `calibrate()` is collecting, null otherwise. */
-  get calibrationProgress(): number | null {
-    return this.#calibration ? this.#calibration.samples / CALIBRATION_SAMPLES : null;
+  /** What calibration is doing right now, or null when it is doing nothing. */
+  get calibration(): CalibrationState | null {
+    const run = this.#calibration;
+    if (!run) return null;
+    if (run.phase === 'centre') {
+      return { phase: 'centre', progress: run.samples / CALIBRATION_SAMPLES, travel: [] };
+    }
+    const travel = run.lo.map((lo, i) => [lo, run.hi[i] ?? 0] as const);
+    const swept = travel.filter(([lo, hi]) => -lo >= MIN_TRAVEL && hi >= MIN_TRAVEL).length;
+    return { phase: 'sweep', progress: travel.length ? swept / travel.length : 0, travel };
+  }
+
+  /** Worst resting wobble measured by the last centring pass, in axis units. */
+  get restJitter(): number | null {
+    return this.#jitter;
+  }
+
+  /**
+   * A deadzone that clears this pad's own noise, with room to spare.
+   *
+   * Two and a half times the measured wobble, plus a floor: the multiplier is
+   * headroom for the wobble being worse later than it was during the sample,
+   * and the floor stops a suspiciously clean reading producing a deadzone so
+   * tight that the first warm afternoon reintroduces drift.
+   */
+  get suggestedDeadzone(): number | null {
+    if (this.#jitter === null) return null;
+    return clamp(Math.round((this.#jitter * 2.5 + 0.04) * 100) / 100, MIN_DEADZONE, MAX_DEADZONE);
   }
 
   /** The mask currently held, for the on-screen legend. */
@@ -145,6 +211,18 @@ export class LocalControls {
     this.#latch = latch;
     this.#applied = 0;
     this.#recompute();
+  }
+
+  get suspended(): boolean {
+    return this.#suspended;
+  }
+
+  /** Stop driving the game without forgetting which port we drive. */
+  setSuspended(suspended: boolean): void {
+    if (this.#suspended === suspended) return;
+    this.#suspended = suspended;
+    this.#recompute();
+    this.changed.emit();
   }
 
   // -- profile edits -------------------------------------------------------
@@ -195,13 +273,65 @@ export class LocalControls {
    * Collects a short average rather than a single reading, because a stick that
    * rests at 0.11 also jitters around it, and a one-shot sample would bake the
    * jitter into the offset. Xbox triggers rest at -1 by design and calibrate to
-   * exactly the same rule, which is why there is no trigger special case.
+   * exactly the same rule, which is why there is no trigger special case. The
+   * spread of those same samples is the wobble `suggestedDeadzone` reads.
    */
-  calibrate(): boolean {
+  beginCentring(): boolean {
     const pad = this.#pad;
     if (!pad) return false;
-    this.#calibration = { sum: new Array<number>(pad.raw.length).fill(0), samples: 0, id: pad.id };
+    const n = pad.raw.length;
+    this.#calibration = {
+      phase: 'centre',
+      id: pad.id,
+      sum: new Array<number>(n).fill(0),
+      lo: pad.raw.map((v) => v),
+      hi: pad.raw.map((v) => v),
+      samples: 0,
+    };
     this.changed.emit();
+    return true;
+  }
+
+  /**
+   * Learn how far this pad's axes actually travel.
+   *
+   * Open-ended on purpose — it records extremes until told to stop, rather than
+   * counting samples. Only the player knows when they have pushed the stick
+   * into every corner, and cutting them off mid-circle would bake in a range
+   * that is short on whichever side they had not reached yet.
+   */
+  beginSweep(): boolean {
+    const pad = this.#pad;
+    if (!pad) return false;
+    this.#calibration = {
+      phase: 'sweep',
+      id: pad.id,
+      lo: new Array<number>(pad.raw.length).fill(0),
+      hi: new Array<number>(pad.raw.length).fill(0),
+    };
+    this.changed.emit();
+    return true;
+  }
+
+  /**
+   * Keep what the sweep saw.
+   *
+   * An axis that never moved keeps whatever it had rather than being recorded
+   * as having no travel: a pad with one broken stick should still calibrate the
+   * working one, and a divisor of zero is the one thing that must not reach the
+   * profile.
+   */
+  commitSweep(): boolean {
+    const run = this.#calibration;
+    if (run?.phase !== 'sweep') return false;
+    const previous = this.#profile.range[run.id] ?? [];
+    const range = run.lo.map((lo, i) => {
+      const hi = run.hi[i] ?? 0;
+      const usable = -lo >= MIN_TRAVEL && hi >= MIN_TRAVEL;
+      return usable ? ([lo, hi] as const) : (previous[i] ?? NO_TRAVEL);
+    });
+    this.#calibration = null;
+    this.#setProfile({ ...this.#profile, range: { ...this.#profile.range, [run.id]: range } });
     return true;
   }
 
@@ -209,6 +339,27 @@ export class LocalControls {
     if (!this.#calibration) return;
     this.#calibration = null;
     this.changed.emit();
+  }
+
+  /** Forget everything measured for the connected pad, back to raw readings. */
+  clearCalibration(): boolean {
+    const pad = this.#pad;
+    if (!pad) return false;
+    const rest = { ...this.#profile.rest };
+    const range = { ...this.#profile.range };
+    delete rest[pad.id];
+    delete range[pad.id];
+    this.#calibration = null;
+    this.#jitter = null;
+    this.#setProfile({ ...this.#profile, rest, range });
+    return true;
+  }
+
+  /** True once this pad has been through both phases at least once. */
+  isCalibrated(): boolean {
+    const pad = this.#pad;
+    if (!pad) return false;
+    return this.#profile.rest[pad.id] !== undefined && this.#profile.range[pad.id] !== undefined;
   }
 
   // -- rebinding -----------------------------------------------------------
@@ -293,13 +444,14 @@ export class LocalControls {
     }
     if (!found) return null;
     const rest = this.#profile.rest[found.id] ?? [];
+    const range = this.#profile.range[found.id] ?? [];
     const raw = Array.from(found.axes);
     return {
       index: found.index,
       id: found.id,
       standard: found.mapping === 'standard',
       raw,
-      corrected: raw.map((v, i) => clamp(v - (rest[i] ?? 0), -2, 2)),
+      corrected: raw.map((v, i) => correctAxis(v, rest[i] ?? 0, range[i] ?? NO_TRAVEL)),
       buttons: found.buttons.map((b) => b.pressed || b.value > BUTTON_THRESHOLD),
     };
   }
@@ -361,11 +513,29 @@ export class LocalControls {
       this.changed.emit();
       return;
     }
-    for (let i = 0; i < run.sum.length; i += 1) run.sum[i] = (run.sum[i] ?? 0) + (pad.raw[i] ?? 0);
+    if (run.phase === 'sweep') {
+      // Relative to rest, so a sweep is measured from wherever centring put the
+      // origin rather than from the device's own idea of zero.
+      const rest = this.#profile.rest[run.id] ?? [];
+      for (let i = 0; i < run.lo.length; i += 1) {
+        const v = (pad.raw[i] ?? 0) - (rest[i] ?? 0);
+        run.lo[i] = Math.min(run.lo[i] ?? 0, v);
+        run.hi[i] = Math.max(run.hi[i] ?? 0, v);
+      }
+      return;
+    }
+    for (let i = 0; i < run.sum.length; i += 1) {
+      const v = pad.raw[i] ?? 0;
+      run.sum[i] = (run.sum[i] ?? 0) + v;
+      run.lo[i] = Math.min(run.lo[i] ?? v, v);
+      run.hi[i] = Math.max(run.hi[i] ?? v, v);
+    }
     run.samples += 1;
     if (run.samples < CALIBRATION_SAMPLES) return;
     this.#calibration = null;
     const rest = run.sum.map((total) => clamp(total / run.samples, -1, 1));
+    // Half the peak-to-peak spread of a stick nobody was touching.
+    this.#jitter = Math.max(0, ...run.hi.map((hi, i) => (hi - (run.lo[i] ?? hi)) / 2));
     this.#setProfile({ ...this.#profile, rest: { ...this.#profile.rest, [run.id]: rest } });
   }
 
@@ -425,6 +595,14 @@ export class LocalControls {
     this.#profile = profile;
     this.#reindex();
     saveProfile(profile);
+    /*
+     * Rest, travel and deadzone all change what an axis reads, and the snapshot
+     * was computed from the profile this one just replaced. Re-reading here
+     * rather than waiting for the next poll keeps "corrected agrees with the
+     * profile that produced it" true at every instant — otherwise the frame in
+     * which centring commits still reports the drift it just cancelled.
+     */
+    if (this.#pad) this.#pad = this.#readPad();
     this.#recompute();
     this.changed.emit();
   }
@@ -446,7 +624,11 @@ export class LocalControls {
 
   #recompute(): void {
     let mask = 0;
-    for (const token of this.#down) mask |= this.#index.get(token) ?? 0;
+    // Still tracked while suspended — `isDown` keeps lighting the picture up,
+    // it just stops reaching the emulator.
+    if (!this.#suspended) {
+      for (const token of this.#down) mask |= this.#index.get(token) ?? 0;
+    }
     this.#apply(mask);
   }
 

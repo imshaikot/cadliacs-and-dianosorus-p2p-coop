@@ -32,11 +32,25 @@ export interface ControlProfile {
   /**
    * Measured rest position per axis, keyed by gamepad id.
    *
-   * This is the calibration. A worn stick rests at 0.12 rather than 0, and an
+   * Half the calibration. A worn stick rests at 0.12 rather than 0, and an
    * Xbox trigger rests at -1 by design; subtracting the measured rest turns
    * both into "0 means untouched" without any per-device special-casing.
    */
   readonly rest: Readonly<Record<string, readonly number[]>>;
+  /**
+   * Measured travel per axis as `[lo, hi]` either side of rest, keyed by
+   * gamepad id. The other half.
+   *
+   * Rest alone assumes every stick reaches ±1, and a tired one does not: at
+   * 0.72 of travel the deadzone eats a third of what is left and the last
+   * third of the gate never arrives at all. Dividing by what the stick
+   * actually reaches restores a full-scale ±1 from whatever it has left.
+   *
+   * Two numbers rather than one because travel is routinely asymmetric — the
+   * same stick giving −1.00 and +0.78 is ordinary — and a single span would
+   * split the difference and be wrong in both directions.
+   */
+  readonly range: Readonly<Record<string, ReadonlyArray<readonly [number, number]>>>;
 }
 
 export const MIN_DEADZONE = 0.05;
@@ -103,7 +117,7 @@ function defaultBindings(): Bindings {
 }
 
 export function defaultProfile(): ControlProfile {
-  return { bindings: defaultBindings(), deadzone: 0.35, rest: {} };
+  return { bindings: defaultBindings(), deadzone: 0.35, rest: {}, range: {} };
 }
 
 /**
@@ -207,6 +221,7 @@ interface StoredProfile {
   bindings?: Record<string, unknown>;
   deadzone?: unknown;
   rest?: Record<string, unknown>;
+  range?: Record<string, unknown>;
 }
 
 /**
@@ -236,6 +251,7 @@ export function saveProfile(profile: ControlProfile): void {
     bindings: Object.fromEntries(BUTTON_NAMES.map((n) => [n, profile.bindings[n].map(tokenOf)])),
     deadzone: profile.deadzone,
     rest: profile.rest,
+    range: profile.range,
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
@@ -278,7 +294,51 @@ function sanitize(stored: StoredProfile): ControlProfile {
     rest[id] = axes.map((v) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, -1, 1) : 0));
   }
 
-  return { bindings, deadzone, rest };
+  /*
+   * A pair that is not a pair, or one that does not straddle zero, is not a
+   * measurement of anything — it becomes the identity rather than a divisor,
+   * because dividing live axis values by a number this file invented is how a
+   * stick ends up twitching at rest.
+   */
+  const range: Record<string, Array<readonly [number, number]>> = {};
+  for (const [id, axes] of Object.entries(stored.range ?? {})) {
+    if (!Array.isArray(axes)) continue;
+    range[id] = axes.map((pair) => {
+      if (!Array.isArray(pair) || pair.length !== 2) return NO_TRAVEL;
+      const [lo, hi] = pair as [unknown, unknown];
+      if (typeof lo !== 'number' || typeof hi !== 'number') return NO_TRAVEL;
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) return NO_TRAVEL;
+      if (lo > 0 || hi < 0) return NO_TRAVEL;
+      return [clamp(lo, -2, 0), clamp(hi, 0, 2)] as const;
+    });
+  }
+
+  return { bindings, deadzone, rest, range };
+}
+
+/** "Measured nothing" — scale by this and the axis is left exactly as it came. */
+export const NO_TRAVEL: readonly [number, number] = [-1, 1];
+
+/**
+ * Below this much travel we refuse to scale.
+ *
+ * A stick that only reported 0.15 either was not swept or is broken, and
+ * dividing by 0.15 turns its resting jitter into a permanent hard direction.
+ */
+export const MIN_TRAVEL = 0.35;
+
+/**
+ * Put a raw axis on a full-scale ±1, given what this pad actually does.
+ *
+ * Rest first, then travel, then clamp — the order matters, since travel is
+ * measured relative to rest and applying it to an uncentred value would scale
+ * the offset along with the signal.
+ */
+export function correctAxis(raw: number, rest: number, travel: readonly [number, number]): number {
+  const centred = raw - rest;
+  const reach = centred < 0 ? -travel[0] : travel[1];
+  const scaled = reach >= MIN_TRAVEL ? centred / reach : centred;
+  return clamp(scaled, -2, 2);
 }
 
 export function clamp(value: number, lo: number, hi: number): number {

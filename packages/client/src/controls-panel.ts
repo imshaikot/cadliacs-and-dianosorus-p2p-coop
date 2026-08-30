@@ -10,14 +10,12 @@
  *
  * It drives its own rAF loop rather than borrowing the emulator's, because it
  * has to work on the landing page — before a room, a ROM or a clock exists.
+ *
+ * Anything to do with the *device* rather than the mapping — how far the sticks
+ * travel, where they rest, the deadzone — lives in the controller dialog next
+ * door. This list is about what your controls do; that is about what they are.
  */
-import {
-  BUTTON_GLYPH,
-  MAX_DEADZONE,
-  MIN_DEADZONE,
-  describeBinding,
-  tokenOf,
-} from './emulator/bindings.js';
+import { BUTTON_GLYPH, describeBinding, tokenOf } from './emulator/bindings.js';
 import type { Binding } from './emulator/bindings.js';
 import type { LocalControls } from './emulator/controls.js';
 import { BUTTON_NAMES } from './emulator/input.js';
@@ -28,9 +26,6 @@ function must<T extends Element>(id: string): T {
   if (!el) throw new Error(`missing element #${id}`);
   return el as unknown as T;
 }
-
-/** Standard-mapping axis names, matching describeBinding's. */
-const AXIS_NAMES = ['L-X', 'L-Y', 'R-X', 'R-Y'];
 
 /**
  * Reading order for the legend: stick, then the six-button cluster in its own
@@ -72,49 +67,29 @@ export class ControlsPanel {
   readonly #padPill = must<HTMLElement>('pad-pill');
   readonly #hint = must<HTMLElement>('controls-hint');
   readonly #reset = must<HTMLButtonElement>('btn-controls-reset');
-  readonly #calib = must<HTMLElement>('calib');
-  readonly #deadzone = must<HTMLInputElement>('deadzone');
-  readonly #deadzoneOut = must<HTMLOutputElement>('deadzone-out');
-  readonly #calibrate = must<HTMLButtonElement>('btn-calibrate');
-  readonly #meters = must<HTMLOListElement>('axis-meters');
+  readonly #openPad = must<HTMLButtonElement>('btn-pad-open');
 
   /** Which button is waiting for a press, and the chip that will hold it. */
   #capturing: { button: ButtonName; replacing: Binding | null } | null = null;
   #captureTimer: number | null = null;
   #raf = 0;
-  /** The pad the meters were built for, so they are rebuilt only on a change. */
-  #meterPadId: string | null = null;
-  #meterRows: Array<{ fill: HTMLElement; band: HTMLElement; value: HTMLElement }> = [];
+  /** Opens the controller dialog. Installed by main, which owns that dialog. */
+  #onOpenPad: (() => void) | null = null;
 
   constructor(controls: LocalControls) {
     this.#controls = controls;
 
-    this.#deadzone.min = String(MIN_DEADZONE);
-    this.#deadzone.max = String(MAX_DEADZONE);
     this.#list.addEventListener('click', (e) => this.#onListClick(e));
+    this.#openPad.addEventListener('click', () => {
+      this.#openPad.blur();
+      this.#onOpenPad?.();
+    });
     this.#reset.addEventListener('click', () => {
       this.#controls.cancelCapture();
       this.#controls.resetToDefaults();
       this.#say('Defaults restored.');
       this.#reset.blur();
     });
-    this.#deadzone.addEventListener('input', () => {
-      this.#controls.setDeadzone(Number(this.#deadzone.value));
-    });
-    this.#calibrate.addEventListener('click', () => {
-      this.#calibrate.blur();
-      if (this.#controls.calibrationProgress !== null) {
-        this.#controls.cancelCalibration();
-        this.#say('Calibration cancelled.');
-        return;
-      }
-      if (this.#controls.calibrate()) {
-        this.#say('Let go of everything — sampling where the sticks rest.');
-      } else {
-        this.#say('No gamepad to calibrate. Press a button on it first.');
-      }
-    });
-
     controls.changed.on(() => this.render());
     this.render();
     this.#say(IDLE_HINT);
@@ -125,6 +100,11 @@ export class ControlsPanel {
     cancelAnimationFrame(this.#raf);
     this.#raf = 0;
     if (this.#captureTimer !== null) clearTimeout(this.#captureTimer);
+  }
+
+  /** What `controller…` does. Set by main, which owns the dialog. */
+  onOpenController(open: () => void): void {
+    this.#onOpenPad = open;
   }
 
   /** Which player this peer drives, or null when it is not in a room. */
@@ -155,13 +135,6 @@ export class ControlsPanel {
     this.#padPill.title = pad
       ? `${pad.id}\n${pad.buttons.length} buttons, ${pad.raw.length} axes, mapping: ${standard ? 'standard' : 'unknown'}`
       : 'The browser only reveals a gamepad after you press a button on it.';
-
-    // Calibration is meaningless with nothing plugged in, and a deadzone slider
-    // with no axes to apply it to is just a mystery knob.
-    this.#calib.hidden = pad === null;
-    this.#deadzone.value = String(this.#controls.profile.deadzone);
-    this.#deadzoneOut.textContent = this.#controls.profile.deadzone.toFixed(2);
-    this.#buildMeters(pad?.id ?? null, pad?.raw.length ?? 0, standard);
   }
 
   #row(name: ButtonName, standard: boolean): HTMLLIElement {
@@ -221,33 +194,6 @@ export class ControlsPanel {
     return chip;
   }
 
-  #buildMeters(padId: string | null, axisCount: number, standard: boolean): void {
-    if (padId === this.#meterPadId && this.#meterRows.length === axisCount) return;
-    this.#meterPadId = padId;
-    this.#meterRows = [];
-    const rows: HTMLLIElement[] = [];
-    for (let i = 0; i < axisCount; i += 1) {
-      const li = document.createElement('li');
-      const name = document.createElement('span');
-      name.className = 'axis-name';
-      name.textContent = (standard ? AXIS_NAMES[i] : undefined) ?? `AXIS ${i}`;
-      const track = document.createElement('span');
-      track.className = 'axis-track';
-      const band = document.createElement('i');
-      band.className = 'axis-band';
-      const fill = document.createElement('i');
-      fill.className = 'axis-fill';
-      track.append(band, fill);
-      const value = document.createElement('span');
-      value.className = 'axis-value';
-      value.textContent = '0.00';
-      li.append(name, track, value);
-      rows.push(li);
-      this.#meterRows.push({ fill, band, value });
-    }
-    this.#meters.replaceChildren(...rows);
-  }
-
   // -- the live loop -------------------------------------------------------
 
   #tick = (): void => {
@@ -267,27 +213,6 @@ export class ControlsPanel {
       }
     }
 
-    const progress = this.#controls.calibrationProgress;
-    this.#calibrate.textContent =
-      progress === null ? 'centre sticks' : `sampling ${Math.round(progress * 100)}%`;
-
-    const pad = this.#controls.pad;
-    if (!pad || this.#meterRows.length === 0) return;
-    const dz = this.#controls.profile.deadzone;
-    for (let i = 0; i < this.#meterRows.length; i += 1) {
-      const row = this.#meterRows[i];
-      if (!row) continue;
-      const value = clampUnit(pad.corrected[i] ?? 0);
-      // Bars grow out of the centre, so a resting stick is visibly a flat line
-      // and a drifting one is visibly not.
-      row.fill.style.left = `${value >= 0 ? 50 : 50 + value * 50}%`;
-      row.fill.style.width = `${Math.abs(value) * 50}%`;
-      row.band.style.left = `${50 - dz * 50}%`;
-      row.band.style.width = `${dz * 100}%`;
-      setFlag(row.fill, 'live', Math.abs(value) >= dz);
-      const text = value.toFixed(2);
-      if (row.value.textContent !== text) row.value.textContent = text;
-    }
   };
 
   // -- rebinding -----------------------------------------------------------
@@ -358,10 +283,6 @@ function setFlag(el: HTMLElement, name: string, on: boolean): void {
   } else if (el.dataset[name] !== undefined) {
     delete el.dataset[name];
   }
-}
-
-function clampUnit(value: number): number {
-  return value < -1 ? -1 : value > 1 ? 1 : value;
 }
 
 /** Pad ids are long and vendor-shaped: "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e...)". */

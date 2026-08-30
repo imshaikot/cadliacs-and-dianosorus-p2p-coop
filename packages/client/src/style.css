@@ -1145,22 +1145,131 @@ button.bind.add:hover { color: var(--ink); }
 .bind .x:hover { color: var(--ng); }
 button.bind[data-down='true'] .x { color: #05240f; }
 
-/* ------------------------------------------------------------ calibration */
+/* ------------------------------------------------- the controller dialog */
 
-.calib { padding-top: var(--gap); border-top: 1px solid var(--line); }
-.calib-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-.calib-row label {
+/*
+  A console's controller screen: the pad big and central, one instruction at a
+  time under it, and nothing else competing for the eye. Sized off the canvas
+  rather than the text, because the picture is the point.
+*/
+.pad-dialog {
+  width: min(38rem, calc(100vw - 2rem));
+  padding: 0;
+  border: 1px solid var(--line-lit);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.66);
+}
+.pad-dialog::backdrop { background: rgba(3, 6, 12, 0.72); }
+.pad-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: var(--pad) var(--pad) 0;
+}
+.pad-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+
+/* The well the pad sits in, so the drawing reads as a lit object on a surface
+   rather than as ink on the panel. */
+.pad-canvas {
+  display: block;
+  width: calc(100% - var(--pad) * 2);
+  /*
+   * Tall enough that the 340x200 drawing is limited by the width rather than
+   * the height — at 210 the pad sat in the middle of its own box with a third
+   * of the canvas empty either side.
+   */
+  height: 250px;
+  margin: 0.8rem var(--pad) 0;
+  border-radius: 7px;
+  background: var(--well);
+  border: 1px solid var(--line);
+}
+
+/* Three dots and three words. Enough to know where you are without reading. */
+.pad-steps {
+  list-style: none;
+  display: flex;
+  gap: 0.4rem;
+  margin: var(--gap) var(--pad) 0;
+  padding: 0;
+}
+.pad-steps li {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  border-radius: 5px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--faint);
+  background: var(--well);
+  border: 1px solid var(--line);
+}
+.pad-steps li[data-state='now'] {
+  color: var(--on-coin);
+  background: var(--coin);
+  border-color: var(--coin-edge);
+  font-weight: 700;
+}
+.pad-steps li[data-state='done'] { color: var(--ok); border-color: var(--line-lit); }
+
+.pad-body {
+  margin: 0.8rem var(--pad) 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--dim);
+  /* Three lines of copy, so a longer instruction does not shove the buttons
+     down the screen and move them under the pointer mid-read. */
+  min-height: 3.9em;
+}
+.pad-readout {
+  margin: 0.5rem var(--pad) 0;
+  font-family: var(--font-data);
+  font-size: 10.5px;
+  color: var(--faint);
+  min-height: 1.3em;
+}
+/* The bar is the element's own background, filled to --fraction, so there is no
+   second node to keep in step with the label. Same trick as the ROM transfer. */
+.pad-progress {
+  margin: 0.5rem var(--pad) 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--ink);
+  background:
+    linear-gradient(90deg, rgba(255, 200, 61, 0.38) var(--fraction, 0%), transparent var(--fraction, 0%)),
+    var(--panel-lit);
+  transition: background 120ms linear;
+}
+
+.pad-deadzone {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0.8rem var(--pad) 0;
+}
+.pad-deadzone label {
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--dim);
 }
-.calib-row output { font-family: var(--font-data); font-size: 11px; color: var(--ink); min-width: 2.6rem; }
+.pad-deadzone output {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--ink);
+  min-width: 2.6rem;
+}
 /* The global `input` rule is written for text fields; a range needs none of it. */
-.calib-row input[type='range'] {
+.pad-deadzone input[type='range'] {
   flex: 1;
   min-width: 8rem;
-  max-width: 18rem;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1168,35 +1277,18 @@ button.bind[data-down='true'] .x { color: #05240f; }
   accent-color: var(--coin);
 }
 
-.axes { list-style: none; margin: var(--gap) 0 0; padding: 0; display: grid; gap: 0.3rem; }
-.axes li { display: flex; align-items: center; gap: 0.6rem; font-size: 11px; }
-.axis-name { min-width: 4.5rem; color: var(--dim); letter-spacing: 0.1em; text-transform: uppercase; }
-.axis-value { min-width: 3rem; text-align: right; font-family: var(--font-data); color: var(--faint); }
-
-.axis-track {
-  position: relative;
-  flex: 1;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--well);
-  overflow: hidden;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+.pad-menu {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: flex-end;
+  margin: var(--gap) 0 0;
+  padding: var(--gap) var(--pad) var(--pad);
+  border-top: 1px solid var(--line);
 }
-/* Centre tick: the bar grows out of it, so a resting stick is a flat line and a
-   drifting one is visibly not — which is the entire case for calibrating. */
-.axis-track::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.18);
-}
-.axis-band { position: absolute; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.07); }
-.axis-fill { position: absolute; top: 0; bottom: 0; background: var(--faint); }
-/* Past the deadzone the axis is genuinely pressing a button. */
-.axis-fill[data-live='true'] { background: var(--ok); }
+.pad-menu form { display: contents; }
+/* Pushes the destructive one away from the two a player actually wants. */
+.pad-menu #btn-pad-secondary { margin-right: auto; }
 
 .controls-hint { margin: 0; font-size: 12px; color: var(--faint); }
 

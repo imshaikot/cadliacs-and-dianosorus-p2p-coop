@@ -25,8 +25,9 @@
     "verify:capacity": "node tools/verify/verify-capacity.mjs",
     "verify:romshare": "node tools/verify/verify-romshare.mjs",
     "verify:systems": "node tools/verify/verify-systems.mjs",
+    "verify:controller": "node tools/verify/verify-controller.mjs",
     "verify:fullscreen": "node tools/verify/verify-fullscreen.mjs",
-    "verify": "yarn verify:m0 && yarn verify:m1 && yarn verify:m2 && yarn verify:m3 && yarn verify:m4 && yarn verify:m6 && yarn verify:router && yarn verify:capacity && yarn verify:romshare && yarn verify:systems && yarn verify:fullscreen",
+    "verify": "yarn verify:m0 && yarn verify:m1 && yarn verify:m2 && yarn verify:m3 && yarn verify:m4 && yarn verify:m6 && yarn verify:router && yarn verify:capacity && yarn verify:romshare && yarn verify:systems && yarn verify:controller && yarn verify:fullscreen",
     "verify:prod": "node --env-file-if-exists=.env tools/verify/verify-prod.mjs",
     "deploy": "bash scripts/deploy.sh"
   },

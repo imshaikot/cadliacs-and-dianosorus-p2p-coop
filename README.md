@@ -84,8 +84,21 @@ on, and whose copy it is.
 
 Arcade conventions, so `5` then `1` begins a game. Six buttons because a fighter
 needs six; a beat-'em-up just uses the first two. Every binding is remappable
-from the control panel, which also takes gamepads — plug one in, press a button,
-and it appears with a deadzone slider and live axis meters.
+from the control panel, which also takes gamepads — plug one in and press a
+button, and it appears.
+
+**Your controller, drawn.** `controller…` in that panel opens a picture of your
+pad that lights up as you use it: buttons glow, the sticks move as dots, and the
+dashed ring is the deadzone — a stick sitting outside it while you are not
+touching it is a stick that drifts. Each control is labelled with what it does in
+the game, so it doubles as the mapping.
+
+If something looks wrong, **calibrate** walks it through in three steps: hands
+off to find where the sticks rest, roll them around to find how far they actually
+travel, then a deadzone with a suggestion based on the wobble it just measured.
+A worn stick that only reaches 0.72 gets its full range back. Input is held while
+that dialog is open, so sweeping the sticks cannot send your character across
+the screen mid-game.
 
 **Voice chat.** You join muted, and muted means the microphone is genuinely
 closed — no track, no recording indicator. Click the button on your token or

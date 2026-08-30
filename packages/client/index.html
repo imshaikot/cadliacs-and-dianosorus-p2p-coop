@@ -251,6 +251,53 @@
         <ol class="chat-log" id="chat-log"></ol>
       </section>
 
+      <!--
+        The controller, drawn and live. A canvas rather than DOM nodes: this
+        repaints every frame against a real device, and seventeen buttons as
+        elements would be seventeen style writes and a layout pass per frame.
+
+        It is a tester first and a calibration wizard second — "is my stick
+        drifting" is answered by looking at it, and only then is there a reason
+        to calibrate anything.
+      -->
+      <dialog class="pad-dialog" id="pad-modal">
+        <header class="pad-head">
+          <div>
+            <p class="eyebrow">controller</p>
+            <h2 id="pad-step-title">Press anything</h2>
+          </div>
+          <span class="pad-pill" id="pad-name" data-state="none">no gamepad</span>
+        </header>
+
+        <canvas class="pad-canvas" id="pad-canvas" width="680" height="400"
+                aria-label="Your controller, lighting up as you use it"></canvas>
+
+        <ol class="pad-steps" id="pad-steps">
+          <li data-state="idle">Centre</li>
+          <li data-state="idle">Range</li>
+          <li data-state="idle">Deadzone</li>
+        </ol>
+
+        <p class="pad-body" id="pad-step-body"></p>
+        <p class="pad-progress" id="pad-progress" hidden aria-live="polite"></p>
+        <p class="pad-readout" id="pad-readout"></p>
+
+        <div class="pad-deadzone" id="pad-deadzone-row">
+          <label for="pad-deadzone">deadzone</label>
+          <input type="range" id="pad-deadzone" min="0.05" max="0.8" step="0.01" value="0.35" />
+          <output id="pad-deadzone-out" for="pad-deadzone">0.35</output>
+          <button class="btn btn-ghost btn-small" id="btn-pad-suggest" type="button" hidden></button>
+        </div>
+
+        <menu class="pad-menu">
+          <button class="btn btn-ghost btn-small" id="btn-pad-secondary" type="button">clear calibration</button>
+          <button class="btn btn-coin btn-small" id="btn-pad-primary" type="button">calibrate</button>
+          <form method="dialog">
+            <button class="btn btn-ghost btn-small" id="btn-pad-close" type="submit">close</button>
+          </form>
+        </menu>
+      </dialog>
+
       <!-- Reached from the footer, or from #/author directly. -->
       <section class="panel author" id="view-author" hidden>
         <p class="eyebrow">behind the machine</p>
@@ -289,25 +336,11 @@
 
           <div class="controls-body">
             <div class="controls-actions">
+              <button class="btn btn-ghost btn-small" id="btn-pad-open" type="button">controller…</button>
               <button class="btn btn-ghost btn-small" id="btn-controls-reset" type="button">reset to defaults</button>
             </div>
 
             <ol class="control-list" id="control-list"></ol>
-
-            <!--
-              Hidden until a gamepad exists. A deadzone slider with no axes to
-              apply it to is a mystery knob, and the browser reveals no pad at
-              all until a button has been pressed on it.
-            -->
-            <div class="calib" id="calib" hidden>
-              <div class="calib-row">
-                <label for="deadzone">deadzone</label>
-                <input type="range" id="deadzone" min="0.05" max="0.8" step="0.01" value="0.35" />
-                <output id="deadzone-out" for="deadzone">0.35</output>
-                <button class="btn btn-ghost btn-small" id="btn-calibrate" type="button">centre sticks</button>
-              </div>
-              <ol class="axes" id="axis-meters"></ol>
-            </div>
 
             <p class="controls-hint" id="controls-hint"></p>
           </div>
