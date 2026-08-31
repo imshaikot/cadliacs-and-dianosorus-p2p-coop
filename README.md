@@ -12,6 +12,13 @@ video stream.
 
 ▶ **[Play it](https://imshaikot.github.io/retro-games-p2p-multiplayer-coop/)**
 
+[![Two browsers, one room, one game — joining mid-session and playing in lockstep](docs/demo.gif)](docs/demo.mp4)
+
+*Two browsers in one room: a guest joins mid-game, receives the host's romset and
+savestate over the mesh, and both simulations run in lockstep. Game artwork is
+masked — this player ships no games. Click through for the [full 57-second
+clip](docs/demo.mp4).*
+
 ## Requirements
 
 - Node 20+ and Yarn 4 (the repo pins its own Yarn, so nothing to install)
@@ -111,6 +118,16 @@ Headphones are worth it.
 while everyone is handed the same savestate — that is what keeps the simulations
 identical. If a player vanishes, the rest drop them and carry on within a few
 seconds.
+
+## How it stays in sync
+
+![Architecture: two peers running their own FBNeo core, exchanging inputs, savestates and voice directly; the PeerJS broker does signalling only](docs/architecture.png)
+
+The broker introduces peers and then leaves the path — everything that matters
+travels peer to peer. Input packets are tiny and self-healing (each carries the
+last 12 frames, so a lost packet is repaired by the next one), savestates and
+the romset ride the same mesh when someone joins, and voice gets its own call
+per pair so it can never stall a frame.
 
 ## Built with
 

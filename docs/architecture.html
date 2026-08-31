@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- Source for docs/architecture.png. Regenerate with the render-visual skill:
+         node <skill>/scripts/render.mjs docs/architecture.html docs/architecture.png --theme neon -->
+    <link rel="stylesheet" href="../themes/neon.css" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        width: 1360px; height: 740px; overflow: hidden;
+        background: var(--ground);
+        position: relative;
+        font-family: var(--font-display);
+      }
+      .glow { position: absolute; border-radius: 999px; filter: blur(120px); opacity: var(--glow-opacity); }
+      .g1 { width: 560px; height: 560px; top: -240px; left: -100px; background: var(--glow1); }
+      .g2 { width: 520px; height: 520px; top: -200px; right: -120px; background: var(--glow2); }
+      .dots {
+        position: absolute; inset: 0;
+        background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0);
+        background-size: 30px 30px;
+        -webkit-mask-image: radial-gradient(ellipse 80% 75% at 50% 45%, #000 40%, transparent 100%);
+      }
+      svg { position: relative; display: block; }
+      .title { font: 600 20px var(--font-display); fill: var(--ink); }
+      .sub { font: 400 12.5px var(--font-mono); fill: var(--ink-dim); }
+      .lbl { font: 500 12.5px var(--font-mono); }
+      .kicker { font: 500 14px var(--font-mono); fill: var(--ink-faint); letter-spacing: 0.04em; }
+      .node { fill: var(--surface); stroke: var(--line); }
+      .s1 { stroke: var(--a1); } .s2 { stroke: var(--a2); } .s3 { stroke: var(--a3); } .s4 { stroke: var(--a4); }
+      .f1 { fill: var(--a1); } .f2 { fill: var(--a2); } .f3 { fill: var(--a3); } .f4 { fill: var(--a4); }
+      .sline { stroke: var(--line); } .fline { fill: var(--line); }
+      .sfaint { stroke: var(--ink-faint); } .ffaint { fill: var(--ink-faint); }
+      .fground { fill: var(--ground); }
+      .glyph { fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </head>
+  <body>
+    <div class="glow g1"></div>
+    <div class="glow g2"></div>
+    <div class="dots"></div>
+
+    <svg width="1360" height="740" viewBox="0 0 1360 740" fill="none">
+      <defs>
+        <marker id="m1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path class="f1" d="M0 0 L10 5 L0 10 z"/>
+        </marker>
+        <marker id="m2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path class="f2" d="M0 0 L10 5 L0 10 z"/>
+        </marker>
+        <marker id="m3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path class="f3" d="M0 0 L10 5 L0 10 z"/>
+        </marker>
+      </defs>
+
+      <text class="kicker" x="70" y="58">RETRO P2P · INPUTS TRAVEL — PIXELS DON'T</text>
+
+      <!-- the broker, deliberately out of the data path -->
+      <g data-part="el-cloud" transform="translate(590, 52)"/>
+      <text class="lbl ffaint" x="680" y="182" text-anchor="middle">PeerJS broker</text>
+      <text class="sub" x="680" y="202" text-anchor="middle">signalling only, then out of the path</text>
+      <g class="sfaint" stroke-width="1.4" stroke-dasharray="4 6">
+        <path d="M240 288 L618 160"/>
+        <path d="M1120 288 L742 160"/>
+      </g>
+
+      <!-- the two peers -->
+      <g transform="translate(70, 290)">
+        <rect class="node" width="340" height="130" rx="14" stroke-width="1"/>
+        <g data-part="g-screen" transform="translate(20,30)"/>
+        <text class="title" x="62" y="50">Host — a browser</text>
+        <text class="sub" x="62" y="76">runs its own FBNeo core (WASM)</text>
+        <text class="sub" x="62" y="98">session · lockstep · Transport seam</text>
+      </g>
+
+      <g transform="translate(950, 290)">
+        <rect class="node" width="340" height="130" rx="14" stroke-width="1"/>
+        <g data-part="g-screen" transform="translate(20,30)"/>
+        <text class="title" x="62" y="50">Guest — a browser</text>
+        <text class="sub" x="62" y="76">runs the same core — not a spectator</text>
+        <text class="sub" x="62" y="98">session · lockstep · Transport seam</text>
+      </g>
+
+      <!-- what actually crosses the wire, peer to peer -->
+      <path d="M414 320 H 946" class="s1" stroke-width="1.8" marker-start="url(#m1)" marker-end="url(#m1)"/>
+      <text class="lbl f1" x="680" y="304" text-anchor="middle">inputs — ~60/s each way, 12 frames of history in every packet</text>
+
+      <path d="M414 355 H 946" class="s2" stroke-width="1.8" marker-end="url(#m2)"/>
+      <text class="lbl f2" x="680" y="339" text-anchor="middle">on a join: savestate to everyone, romset to whoever has none</text>
+
+      <path d="M414 390 H 946" class="s3" stroke-width="1.8" marker-start="url(#m3)" marker-end="url(#m3)"/>
+      <text class="lbl f3" x="680" y="374" text-anchor="middle">voice — one call per pair, never in the frame path</text>
+
+      <text class="sub" x="680" y="448" text-anchor="middle">rooms hold 2–3 players — every pair connects directly, full mesh</text>
+
+      <!-- the rule everything above serves -->
+      <g transform="translate(70, 510)">
+        <rect class="node" width="1220" height="118" rx="14" stroke-width="1"/>
+        <g data-part="g-check" data-accent="4" transform="translate(20,30)"/>
+        <text class="title" x="62" y="50">Deterministic lockstep</text>
+        <text class="sub" x="62" y="78">frame N is simulated only after every player's input for frame N has arrived — every machine computes an identical game, for ~1.8 KB/s per peer</text>
+        <text class="sub" x="62" y="100">join or leave → pause, hand everyone the host's savestate, restart together at the same frame</text>
+      </g>
+
+      <text class="sub" x="70" y="700" opacity="0.75">The Transport interface is the seam: nothing above it knows PeerJS exists, so the broker and transport layer are a one-file swap.</text>
+    </svg>
+  </body>
+</html>
