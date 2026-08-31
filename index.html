@@ -8,8 +8,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23060a13'/%3E%3Ccircle cx='8' cy='8' r='5.5' fill='%23ffc83d'/%3E%3Crect x='7' y='4.5' width='2' height='7' fill='%23060a13'/%3E%3C/svg%3E"
     />
-    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-BM0_aoSF.js"></script>
-    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-Ci-UwoYK.css">
+    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-d2Hn1anz.js"></script>
+    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-DWMGWtwW.css">
   </head>
   <body>
     <!--
@@ -89,6 +89,88 @@
           <li>voice chat</li>
           <li>zero servers</li>
         </ul>
+
+        <!--
+          The questions a first-time visitor actually has, in static HTML so
+          they read before any script runs (and so a search engine sees them).
+          Inside the landing view on purpose: a room has no use for a primer,
+          and this way it comes and goes with the page that does. One thing it
+          never does is point at where games come from — the rule is stated,
+          not worked around.
+        -->
+        <section class="panel faq" id="faq" aria-labelledby="faq-title">
+          <p class="eyebrow">before you press start</p>
+          <h2 id="faq-title">Questions</h2>
+
+          <details>
+            <summary>What is this?</summary>
+            <p>
+              Classic arcade games, played together in the browser. Up to three
+              players each run the same game, frame for frame — only controller
+              inputs travel between you. Nothing to install, no accounts, no
+              servers.
+            </p>
+          </details>
+          <details>
+            <summary>How do I play with friends?</summary>
+            <p>
+              Press <b>Start a room</b> and you get a code and a link. Hand
+              either to your friends; they pick a name and a token and land in
+              your lobby. You choose the emulator, load the game, and
+              everyone's screen starts at once.
+            </p>
+          </details>
+          <details>
+            <summary>Which games can it play?</summary>
+            <p>
+              Games made for two families of 1990s arcade hardware: Capcom's
+              CPS-1 and CPS-2 boards, and SNK's Neo Geo — the era of fighting
+              games, beat 'em ups and run-and-guns. The host picks the machine
+              for the room before loading a game.
+            </p>
+          </details>
+          <details>
+            <summary>Where do the games come from?</summary>
+            <p>
+              From you. This player ships no games and never downloads any —
+              the host loads a romset zip they are entitled to use, such as one
+              dumped from a board they own. The game is recognised by its
+              filename, so keep the original name.
+            </p>
+          </details>
+          <details>
+            <summary>Do my friends need the game file too?</summary>
+            <p>
+              No. Only the host loads a file — everyone else is sent the
+              host's copy automatically inside the room, so nobody else has to
+              bring anything.
+            </p>
+          </details>
+          <details>
+            <summary>My Neo Geo game will not start.</summary>
+            <p>
+              Every Neo Geo game boots through the <code>neogeo.zip</code>
+              BIOS. Select it together with the game — the picker takes both
+              files at once. Capcom games need no BIOS.
+            </p>
+          </details>
+          <details>
+            <summary>Why does it ask for my microphone?</summary>
+            <p>
+              Voice chat. You join muted and press <kbd>M</kbd> to talk —
+              while you are muted, no microphone is held open at all. Saying
+              no is fine too: you will hear the others and simply not be heard.
+            </p>
+          </details>
+          <details>
+            <summary>Do I need a controller?</summary>
+            <p>
+              The keyboard works out of the box, and a plugged-in gamepad is
+              picked up automatically. Open <b>Controls</b> below to see the
+              bindings, test the pad, and calibrate a drifting stick.
+            </p>
+          </details>
+        </section>
       </section>
 
       <!--
