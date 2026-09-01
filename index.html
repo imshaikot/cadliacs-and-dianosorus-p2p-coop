@@ -145,8 +145,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23030904'/%3E%3Ccircle cx='8' cy='8' r='5.5' fill='%2333ff66'/%3E%3Crect x='7' y='4.5' width='2' height='7' fill='%23030904'/%3E%3C/svg%3E"
     />
-    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-hifQfIw6.js"></script>
-    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-pCCtWyd9.css">
+    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-BtovioqG.js"></script>
+    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-DnCpKdp6.css">
   </head>
   <body>
     <!--
@@ -421,7 +421,13 @@
               so the controls come along, and windowed the stage reserves a band
               underneath the picture rather than letting them cover it.
             -->
-            <div class="touchpad" id="touchpad" hidden></div>
+            <!--
+              aria-hidden because it is a pointer-only duplicate: every one of
+              these twelve controls is already reachable from the keyboard, and
+              a dozen unlabelled shapes a screen reader cannot operate is worse
+              than none. The keyboard mapping is in the controls panel.
+            -->
+            <div class="touchpad" id="touchpad" hidden aria-hidden="true"></div>
           </div>
           <!--
             Who is talking, over the picture. Inside the stage wrapper on
