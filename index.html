@@ -145,8 +145,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23030904'/%3E%3Ccircle cx='8' cy='8' r='5.5' fill='%2333ff66'/%3E%3Crect x='7' y='4.5' width='2' height='7' fill='%23030904'/%3E%3C/svg%3E"
     />
-    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-F3URpSwZ.js"></script>
-    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-f4RPBq7T.css">
+    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-hifQfIw6.js"></script>
+    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-pCCtWyd9.css">
   </head>
   <body>
     <!--
@@ -401,9 +401,27 @@
               <p class="error rom-error" id="rom-error"></p>
               <p class="rom-progress" id="rom-progress" hidden aria-live="polite"></p>
             </div>
-            <button class="btn btn-ghost btn-small stage-btn" id="btn-fullscreen" type="button" hidden
-                    title="Fullscreen (F, or double-click the screen)"
-                    aria-pressed="false">fullscreen</button>
+            <!--
+              The bezel's latches, in one corner. TOUCH only ever appears on a
+              device that can report a touch at all — see src/touch.ts, which
+              refuses to decide that from any single signal.
+            -->
+            <div class="stage-tools">
+              <button class="btn btn-ghost btn-small stage-btn" id="btn-touch" type="button" hidden
+                      title="On-screen arcade controls"
+                      aria-pressed="false">touch</button>
+              <button class="btn btn-ghost btn-small stage-btn" id="btn-fullscreen" type="button" hidden
+                      title="Fullscreen (F, or double-click the screen)"
+                      aria-pressed="false">fullscreen</button>
+            </div>
+            <!--
+              The cabinet, on the glass: a stick bottom-left and the six-button
+              cluster bottom-right, built by src/touch-controls.ts. Inside the
+              stage on purpose — that is what the fullscreen element contains,
+              so the controls come along, and windowed the stage reserves a band
+              underneath the picture rather than letting them cover it.
+            -->
+            <div class="touchpad" id="touchpad" hidden></div>
           </div>
           <!--
             Who is talking, over the picture. Inside the stage wrapper on
@@ -491,6 +509,11 @@
           tell whose machine is "the real one"? No servers, no video streams —
           every player's browser simulates every frame, and only controller
           inputs travel between them.
+        </p>
+        <p class="author-note">
+          An experimental project, built for educational purposes only, from
+          open-source parts and fair use alone. The author does not promote
+          any game, ROM or piracy in any manner.
         </p>
         <ul class="author-links">
           <li><a href="https://github.com/imshaikot" rel="noopener">GitHub — imshaikot</a></li>
