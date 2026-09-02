@@ -157,8 +157,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23030904'/%3E%3Ccircle cx='8' cy='8' r='5.5' fill='%2333ff66'/%3E%3Crect x='7' y='4.5' width='2' height='7' fill='%23030904'/%3E%3C/svg%3E"
     />
-    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-DeCY2cJp.js"></script>
-    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-DqW820Yl.css">
+    <script type="module" crossorigin src="/retro-games-p2p-multiplayer-coop/assets/index-BGHez8cD.js"></script>
+    <link rel="stylesheet" crossorigin href="/retro-games-p2p-multiplayer-coop/assets/index-BxKMVf8Z.css">
   </head>
   <body>
     <!--
@@ -448,18 +448,26 @@
           -->
           <div class="speaking" id="speaking" hidden aria-live="polite"></div>
 
-          <div class="hud-rows">
-            <!--
-              What is loaded and whose copy it is. This doubles as the standing
-              note that the player ships no games: saying it next to the game you
-              are actually playing lands better than a line of legalese nobody
-              reads, and "sent by a player in this room" is genuinely useful when
-              three people are trying to work out why one of them desynced.
-            -->
-            <p class="rom-note" id="rom-note" hidden></p>
-            <p class="hud" id="emu-hud" hidden></p>
-            <p class="hud netplay" id="net-hud" hidden></p>
-          </div>
+          <!--
+            The status drawer, shelved by default. While it is shelved nothing
+            writes to it — see UI.renderHud — and a desync is the one thing
+            that opens it by itself.
+          -->
+          <details class="hud-drawer" id="hud-drawer">
+            <summary>status</summary>
+            <div class="hud-rows">
+              <!--
+                What is loaded and whose copy it is. This doubles as the standing
+                note that the player ships no games: saying it next to the game you
+                are actually playing lands better than a line of legalese nobody
+                reads, and "sent by a player in this room" is genuinely useful when
+                three people are trying to work out why one of them desynced.
+              -->
+              <p class="rom-note" id="rom-note" hidden></p>
+              <p class="hud" id="emu-hud" hidden></p>
+              <p class="hud netplay" id="net-hud" hidden></p>
+            </div>
+          </details>
         </div>
 
         <form class="chat" id="chat-form">
