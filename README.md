@@ -12,12 +12,11 @@ video stream.
 
 ▶ **[Play it](https://imshaikot.github.io/retro-games-p2p-multiplayer-coop/)**
 
-[![Two browsers, one room, one game — joining mid-session and playing in lockstep](docs/demo.gif)](docs/demo.mp4)
+![Two browsers, one room, one game — joining mid-session and playing in lockstep](docs/demo.gif)
 
 *Two browsers in one room: a guest joins mid-game, receives the host's romset and
 savestate over the mesh, and both simulations run in lockstep. Game artwork is
-masked — this player ships no games. Click through for the [full 46-second
-clip](docs/demo.mp4).*
+masked — this player ships no games.*
 
 ## Requirements
 
