@@ -16,7 +16,7 @@ video stream.
 
 *Two browsers in one room: a guest joins mid-game, receives the host's romset and
 savestate over the mesh, and both simulations run in lockstep. Game artwork is
-masked — this player ships no games. Click through for the [full 57-second
+masked — this player ships no games. Click through for the [full 46-second
 clip](docs/demo.mp4).*
 
 ## Requirements
